@@ -108,7 +108,9 @@ sc_val sc_read_symbol(struct in_stream * s) {
         }
         buf[i++] = c;
     }
-    return gc_alloc_symbol(buf);
+    sc_val sym = gc_alloc_symbol(sc_strlen(str));
+    strcpy(sc_symbol_name(sym), sc_string(str));
+    return sym;
 }
 
 sc_val sc_read_string(struct in_stream * s) {

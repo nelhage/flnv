@@ -154,9 +154,9 @@ sc_val gc_alloc_vector(uint32_t len) {
     return TAG_POINTER(p);
 }
 
-sc_val gc_alloc_symbol(char * name) {
+sc_val gc_alloc_symbol(uint32_t len) {
     /* XXX FIXME: This should be refactored better */
-    sc_val v = gc_make_string(name);
+    sc_val v = gc_alloc_string(len);
     *(UNTAG_PTR(v)) = (uint32_t)ADD_TYPE(REMOVE_TYPE(*(UNTAG_PTR(v))), TYPE_SYMBOL);
     return v;
 }

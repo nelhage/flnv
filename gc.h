@@ -34,7 +34,7 @@ int sc_vectorp(sc_val c);
 sc_val gc_alloc_cons();
 sc_val gc_alloc_string(uint32_t len);
 sc_val gc_alloc_vector(uint32_t len);
-sc_val gc_alloc_symbol(char * name);
+sc_val gc_alloc_symbol(uint32_t len);
 
 sc_val gc_make_string(char * s);
 sc_val sc_make_number(int n);

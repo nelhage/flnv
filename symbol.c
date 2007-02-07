@@ -31,7 +31,8 @@ sc_val sc_intern_symbol(char * name) {
         SC_REG(OBARRAY) = oa;
         i = len;
     }
-    v = gc_alloc_symbol(name);
+    v = gc_alloc_symbol(strlen(name));
+    strcpy(sc_symbol_name(v), name);
     sc_vector_set(SC_REG(OBARRAY), i, v);
     return v;
 }
