@@ -1,0 +1,22 @@
+-*- mode: outline -*-
+
+* SICP's compiler
+ * Stack
+ * 7 registers
+  * exp
+   * Expression being evaluated
+  * env
+   * Evaluation environment
+  * val
+   * Return value
+  * continue
+   * Return address
+  * proc
+  * arg1
+  * unev
+
+* Types
+ * cons
+ * string
+ * number
+ * symbol
