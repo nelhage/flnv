@@ -10,8 +10,7 @@ import Control.Monad.Error hiding (Error)
 -- An AST is approximately an Expression, but it makes special forms
 -- and calls explicit. Syntax checking occurs during the translation
 -- from Expression to AST
-data AST = Define String Expression
-         | Lambda [String] AST
+data AST = Lambda [String] AST
          | If AST AST AST
          | Apply AST [AST]
          | AString String
@@ -31,7 +30,9 @@ specialForms :: [(String, Expression -> Desugar AST)]
 specialForms = [ ("quote",  desugarQuoted)
                , ("lambda", desugarLambda)
                , ("if",     desugarIf)
-               , ("begin",  desugarSequence)]
+               , ("begin",  desugarSequence)
+               -- , ("let",    desugarLet)
+               ]
 
 runDesugar :: Desugar x -> Either Error x
 runDesugar (Desugar d) = evalStateT d emptyEnv
@@ -57,9 +58,13 @@ desugarQuoted form = throwError $ SyntaxError "Malformed quoted form" form
 desugarLambda :: Expression -> Desugar AST
 desugarLambda (Cons args body@(Cons fst rest)) =
     do argl <- (flatten args) >>= mapM assertSymbol
+       modify $ extendEnv $ map (flip (,) ()) argl
        bexp <- desugarSequence body
+       modify popFrame
        return $ Lambda argl bexp
 desugarLambda form = throwError $ SyntaxError "Malformed Lambda" form
+
+-- desugarLet :: Expression -> Desugar AST
 
 desugarIf :: Expression -> Desugar AST
 desugarIf (Cons predicate (Cons cons tail)) =

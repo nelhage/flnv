@@ -1,6 +1,7 @@
 module FLNV.Env (Env
                 , emptyEnv
                 , extendEnv
+                , popFrame
                 , addBinding
                 , lookupEnv
                 , maybeLookup) where
@@ -15,6 +16,10 @@ emptyEnv = EmptyEnvironment
 
 extendEnv :: [(String, v)] -> (Env v) -> (Env v)
 extendEnv = Frame
+
+popFrame :: Env v -> Env v
+popFrame EmptyEnvironment = EmptyEnvironment
+popFrame (Frame vals parent) = parent
 
 addBinding :: (MonadError Error m) => String -> v -> Env v -> m (Env v)
 addBinding _ _ EmptyEnvironment = throwError $
