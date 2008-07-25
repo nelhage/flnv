@@ -1,13 +1,14 @@
 module FLNV.AST where
 
 import FLNV.Error
-import FLNV.Parser (Expression(..))
+import FLNV.Expression
 import Control.Monad
 
 -- An AST is approximately an Expression, but it makes special forms
 -- and calls explicit. Syntax checking occurs during the translation
 -- from Expression to AST
-data AST = Lambda [String] AST
+data AST = Define String Expression
+         | Lambda [String] AST
          | If AST AST AST
          | Apply AST [AST]
          | AString String

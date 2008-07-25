@@ -1,32 +1,9 @@
-module FLNV.Parser (Expression(..), readExpr) where
+module FLNV.Parser (readExpr) where
 
+import FLNV.Expression
 import FLNV.Error
 import Control.Monad
 import Text.ParserCombinators.Parsec hiding (newline)
-
-data Expression = Symbol String
-                | Number Integer
-                | String String
-                | Bool Bool
-                | Cons Expression Expression
-                | Nil
-                  deriving (Eq)
-
-instance Show Expression where
-    show (Symbol s) = s
-    show (Number n) = show n
-    show (String s) = '"' : s ++ "\""
-    show (Bool True) = "#t"
-    show (Bool False) = "#f"
-    show c@(Cons a b) = "(" ++ showListInner c ++ ")"
-    show Nil = "()"
-
-showListInner :: Expression -> String
-showListInner (Cons a b@(Cons _ _)) = show a ++ " " ++ showListInner b
-showListInner (Cons a Nil) = show a
-showListInner (Cons a b) = show a ++ " . " ++ showListInner b
-showListInner Nil = ""
-showListInner x = show x
 
 readExpr :: (MonadError Error m) => String -> m Expression
 readExpr s = case parse sExpression "scheme" s of
