@@ -31,7 +31,7 @@ specialForms = [ ("quote",  desugarQuoted)
                , ("lambda", desugarLambda)
                , ("if",     desugarIf)
                , ("begin",  desugarSequence)
-               -- , ("let",    desugarLet)
+               , ("let",    desugarLet)
                ]
 
 runDesugar :: Desugar x -> Either Error x
@@ -64,7 +64,20 @@ desugarLambda (Cons args body@(Cons fst rest)) =
        return $ Lambda argl bexp
 desugarLambda form = throwError $ SyntaxError "Malformed Lambda" form
 
--- desugarLet :: Expression -> Desugar AST
+desugarLet :: Expression -> Desugar AST
+desugarLet (Cons bindings body@(Cons fst rest)) =
+    do (vars, vals) <- letBindings bindings
+       lambda       <- desugarLambda (Cons (foldr Cons Nil vars) body)
+       liftM (Apply lambda) $ mapM desugar vals
+desugarLet err = throwError $ SyntaxError "Malformed Let" err
+
+
+letBindings :: Expression -> Desugar ([Expression],[Expression])
+letBindings Nil = return $ ([],[])
+letBindings (Cons (Cons var (Cons val Nil)) rest) =
+    do (vars,vals) <- letBindings rest
+       return $ (var:vars,val:vals)
+letBindings err = throwError $ SyntaxError "Malformed let bindings" err
 
 desugarIf :: Expression -> Desugar AST
 desugarIf (Cons predicate (Cons cons tail)) =
