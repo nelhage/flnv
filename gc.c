@@ -12,21 +12,37 @@ sc_val _sc_regs[SC_NREGS];
 
 static sc_val sc_root;
 
-static uint32_t * working_mem;
-static uint32_t * free_mem;
-static uint32_t * free_ptr;
-static uint32_t mem_size;
+static uintptr_t * working_mem;
+static uintptr_t * free_mem;
+static uintptr_t * free_ptr;
+static uintptr_t mem_size;
 
 #define TAG_NUMBER(x)  ((x)<<1 | 0x1)
 #define TAG_POINTER(x) (x)
 
-#define NUMBERP(x) ((uint32_t)(x)&0x1)
+#define NUMBERP(x) ((uintptr_t)(x)&0x1)
 #define POINTERP(x)  (!NUMBERP(x))
 
 #define UNTAG_PTR(c) (c)
-#define UNTAG_NUMBER(c) (((uint32_t)(c))>>1)
+#define UNTAG_NUMBER(c) (((sc_int)(c))>>1)
 
 #define MAX(a,b) (((a)>(b))?(a):(b))
+
+#define STRLEN2CELLS(x) (ROUNDUP((x),sizeof(sc_val))/sizeof(sc_val))
+
+// Rounding operations (efficient when n is a power of 2)
+// Round down to the nearest multiple of n
+#define ROUNDDOWN(a, n)                                         \
+({                                                              \
+        uint32_t __a = (uint32_t) (a);                          \
+        (typeof(a)) (__a - __a % (n));                          \
+})
+// Round up to the nearest multiple of n
+#define ROUNDUP(a, n)                                           \
+({                                                              \
+        uint32_t __n = (uint32_t) (n);                          \
+        (typeof(a)) (ROUNDDOWN((uint32_t) (a) + __n - 1, __n)); \
+})
 
 
 #define TYPE_SYMBOL 1
@@ -36,11 +52,11 @@ static uint32_t mem_size;
 
 #define TYPE_BITS   3
 
-#define TYPE(x) (((uint32_t)(x)) & ((1 << TYPE_BITS) - 1))
-#define ADD_TYPE(x,t) ((sc_val)(((uint32_t)(x) << TYPE_BITS) | t))
-#define REMOVE_TYPE(x) ((uint32_t)(x) >> TYPE_BITS)
+#define TYPE(x) (((uintptr_t)(x)) & ((1 << TYPE_BITS) - 1))
+#define ADD_TYPE(x,t) ((sc_val)(((uintptr_t)(x) << TYPE_BITS) | t))
+#define REMOVE_TYPE(x) ((uintptr_t)(x) >> TYPE_BITS)
 
-#define BROKEN_HEART ((uint32_t)0xffffffff)
+#define BROKEN_HEART ((uintptr_t)0xffffffff)
 
 sc_val sc_car(sc_val c) {
     assert(sc_consp(c));
@@ -54,12 +70,12 @@ sc_val sc_cdr(sc_val c) {
 
 void sc_set_car(sc_val c, sc_val val) {
     assert(sc_consp(c));
-    *(UNTAG_PTR(c)+1) = (uint32_t)(val);
+    *(UNTAG_PTR(c)+1) = (uintptr_t)(val);
 }
 
 void sc_set_cdr(sc_val c, sc_val val) {
     assert(sc_consp(c));
-    *(UNTAG_PTR(c)+2) = (uint32_t)(val);
+    *(UNTAG_PTR(c)+2) = (uintptr_t)(val);
 }
 
 char * sc_string(sc_val c) {
@@ -77,12 +93,12 @@ uint32_t sc_strlen(sc_val c) {
     return REMOVE_TYPE(*(UNTAG_PTR(c)));
 }
 
-int sc_number(sc_val n) {
+sc_int sc_number(sc_val n) {
     assert(sc_numberp(n));
     return UNTAG_NUMBER(n);
 }
 
-sc_val sc_make_number(int n) {
+sc_val sc_make_number(sc_int n) {
     return (sc_val)TAG_NUMBER(n);
 }
 
@@ -100,7 +116,7 @@ sc_val sc_vector_ref(sc_val v, uint32_t n) {
 void sc_vector_set(sc_val v, uint32_t n, sc_val x) {
     assert(sc_vectorp(v));
     assert(n < sc_vector_len(v));
-    *(UNTAG_PTR(v) + n + 1) = (uint32_t)x;
+    *(UNTAG_PTR(v) + n + 1) = (uintptr_t)x;
 }
 
 /* Predicates */
@@ -132,24 +148,24 @@ int sc_numberp(sc_val c) {
 
 /* Memory allocation */
 
-uint32_t * gc_alloc(uint32_t n);
+uintptr_t * gc_alloc(uint32_t n);
 
 sc_val gc_alloc_cons() {
-    uint32_t * p = gc_alloc(3);
+    uintptr_t * p = gc_alloc(3);
     *p = TYPE_CONS;
-    *(p + 1) = *(p + 2) = (uint32_t)NIL;
+    *(p + 1) = *(p + 2) = (uintptr_t)NIL;
     return TAG_POINTER(p);
 }
 
 sc_val gc_alloc_string(uint32_t len) {
-    uint32_t * p = gc_alloc((len+3)/4 + 1);
-    *p = (uint32_t)ADD_TYPE(len, TYPE_STRING);
+    uintptr_t * p = gc_alloc(STRLEN2CELLS(len) + 1);
+    *p = (uintptr_t)ADD_TYPE(len, TYPE_STRING);
     return TAG_POINTER(p);
 }
 
 sc_val gc_alloc_vector(uint32_t len) {
-    uint32_t * p = gc_alloc(MAX(len,1)+1);
-    *p = (uint32_t)ADD_TYPE(len, TYPE_VECTOR);
+    uintptr_t * p = gc_alloc(MAX(len,1)+1);
+    *p = (uintptr_t)ADD_TYPE(len, TYPE_VECTOR);
     memset(p+1, 0, len * sizeof(sc_val));
     return TAG_POINTER(p);
 }
@@ -157,7 +173,7 @@ sc_val gc_alloc_vector(uint32_t len) {
 sc_val gc_alloc_symbol(uint32_t len) {
     /* XXX FIXME: This should be refactored better */
     sc_val v = gc_alloc_string(len);
-    *(UNTAG_PTR(v)) = (uint32_t)ADD_TYPE(REMOVE_TYPE(*(UNTAG_PTR(v))), TYPE_SYMBOL);
+    *(UNTAG_PTR(v)) = (uintptr_t)ADD_TYPE(REMOVE_TYPE(*(UNTAG_PTR(v))), TYPE_SYMBOL);
     return v;
 }
 
@@ -168,10 +184,10 @@ sc_val gc_make_string(char * string) {
     return s;
 }
 
-uint32_t * gc_alloc(uint32_t n) {
+uintptr_t * gc_alloc(uint32_t n) {
     if(free_ptr - working_mem + n <= mem_size) {
         /* We have enough space in working memory */
-        uint32_t * p = free_ptr;
+        uintptr_t * p = free_ptr;
         free_ptr += n;
         return p;
     } else {
@@ -179,7 +195,7 @@ uint32_t * gc_alloc(uint32_t n) {
         gc_gc();
         if(free_ptr - working_mem + n <= mem_size) {
             /* The GC gave us enough space */
-            uint32_t * p = free_ptr;
+            uintptr_t * p = free_ptr;
             free_ptr += n;
             return p;
         } else {
@@ -187,7 +203,7 @@ uint32_t * gc_alloc(uint32_t n) {
                use some heuristic to guess when we're running out of
                memory, and could gc_realloc above, instead of GCing first. */
             gc_realloc(n);
-            uint32_t * p = free_ptr;
+            uintptr_t * p = free_ptr;
             free_ptr += n;
             return p;
         }
@@ -196,10 +212,10 @@ uint32_t * gc_alloc(uint32_t n) {
 
 /* GC control */
 void gc_init() {
-    free_mem = malloc(GC_INITIAL_MEM * sizeof(uint32_t));
-    assert(!(((uint32_t)free_mem) & 0x3));
-    working_mem = malloc(GC_INITIAL_MEM * sizeof(uint32_t));
-    assert(!(((uint32_t)working_mem) & 0x3));
+    free_mem = malloc(GC_INITIAL_MEM * sizeof(uintptr_t));
+    assert(!(((uintptr_t)free_mem) & 0x3));
+    working_mem = malloc(GC_INITIAL_MEM * sizeof(uintptr_t));
+    assert(!(((uintptr_t)working_mem) & 0x3));
     free_ptr = working_mem;
     mem_size = GC_INITIAL_MEM;
 
@@ -209,7 +225,7 @@ void gc_init() {
 
 sc_val gc_relocate(sc_val v) {
     int len;
-    uint32_t * ptr, *reloc;
+    uintptr_t * ptr, *reloc;
     uint32_t type;
     if(NUMBERP(v) || NILP(v)) return v;
     ptr = UNTAG_PTR(v);
@@ -222,7 +238,7 @@ sc_val gc_relocate(sc_val v) {
     switch(type) {
     case TYPE_STRING:
     case TYPE_SYMBOL:
-        len = ((REMOVE_TYPE(*ptr)+3)/4 + 1);
+        len = (STRLEN2CELLS(REMOVE_TYPE(*ptr)) + 1);
         break;
     case TYPE_CONS:
         len = 3;
@@ -236,9 +252,9 @@ sc_val gc_relocate(sc_val v) {
     }
 
     reloc = gc_alloc(len);
-    memcpy(reloc, ptr, sizeof(uint32_t) * len);
+    memcpy(reloc, ptr, sizeof(uintptr_t) * len);
     *ptr = BROKEN_HEART;
-    *(ptr + 1) = (uint32_t)(reloc);
+    *(ptr + 1) = (uintptr_t)(reloc);
     return (sc_val)*(ptr + 1);
 }
 
@@ -253,7 +269,7 @@ void gc_protect_roots() {
 void gc_gc() {
     uint32_t old_avail = gc_free_mem();
     printf("Entering garbage collection...");
-    uint32_t *scan, *t;
+    uintptr_t *scan, *t;
     uint32_t len;
 
     t = working_mem;
@@ -267,11 +283,11 @@ void gc_gc() {
         switch(TYPE(*scan)) {
         case TYPE_SYMBOL:
         case TYPE_STRING:
-            scan += (REMOVE_TYPE(*scan)+3)/4 + 1;
+            scan += STRLEN2CELLS(REMOVE_TYPE(*scan)) + 1;
             break;
         case TYPE_CONS:
-            *(scan+1) = (uint32_t)gc_relocate((sc_val)*(scan+1));
-            *(scan+2) = (uint32_t)gc_relocate((sc_val)*(scan+2));
+            *(scan+1) = (uintptr_t)gc_relocate((sc_val)*(scan+1));
+            *(scan+2) = (uintptr_t)gc_relocate((sc_val)*(scan+2));
             scan += 3;
             break;
         case TYPE_VECTOR:
@@ -279,12 +295,12 @@ void gc_gc() {
             scan++;
             if(len == 0) scan++;
             while(len--) {
-                *scan = (uint32_t)gc_relocate((sc_val)*scan);
+                *scan = (uintptr_t)gc_relocate((sc_val)*scan);
                 scan++;
             }
             break;
         default:
-            printf("GC internal error -- invalid 0x%08x at 0x%08x!\n", *scan, (uint32_t)scan);
+            printf("GC internal error -- invalid %p at %p!\n", *scan, (uintptr_t)scan);
             exit(-1);
         }
         if(scan > working_mem + mem_size) {
@@ -295,7 +311,7 @@ void gc_gc() {
 
     /* Zero the old free memory to help catch code that accidentally
        holds onto sc_val's during GC.*/
-    memset(free_mem, 0, sizeof(uint32_t) * mem_size);
+    memset(free_mem, 0, sizeof(uintptr_t) * mem_size);
     printf("Done (freed %d words)\n", gc_free_mem() - old_avail);
 }
 
@@ -306,15 +322,15 @@ void gc_realloc(uint32_t need) {
     printf("New memory: %d words\n", new_size);
 
     free(free_mem);
-    free_mem = malloc(new_size * sizeof(uint32_t));
-    assert(!(((uint32_t)free_mem) & 0x3));
+    free_mem = malloc(new_size * sizeof(uintptr_t));
+    assert(!(((uintptr_t)free_mem) & 0x3));
 
     gc_gc();
 
     free(free_mem);
     mem_size = new_size;
-    free_mem = malloc(mem_size * sizeof(uint32_t));
-    assert(!(((uint32_t)free_mem) & 0x3));
+    free_mem = malloc(mem_size * sizeof(uintptr_t));
+    assert(!(((uintptr_t)free_mem) & 0x3));
 }
 
 

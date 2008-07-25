@@ -3,7 +3,9 @@
 
 #include <stdint.h>
 
-typedef uint32_t* sc_val;
+typedef intptr_t sc_int;
+typedef uintptr_t* sc_val;
+
 
 /* Accesors */
 
@@ -17,7 +19,7 @@ uint32_t sc_strlen(sc_val s);
 
 char* sc_symbol_name(sc_val s);
 
-int sc_number(sc_val n);
+sc_int sc_number(sc_val n);
 
 uint32_t sc_vector_len(sc_val v);
 sc_val sc_vector_ref(sc_val v, uint32_t n);
@@ -37,7 +39,7 @@ sc_val gc_alloc_vector(uint32_t len);
 sc_val gc_alloc_symbol(uint32_t len);
 
 sc_val gc_make_string(char * s);
-sc_val sc_make_number(int n);
+sc_val sc_make_number(sc_int n);
 
 /* GC control */
 void gc_init();
