@@ -95,11 +95,11 @@ desugarSequence = (liftM Sequence) . flatten
 
 assertSymbol :: AST -> Desugar String
 assertSymbol (AVar s) = return $ s
-assertSymbol other = throwError $ SyntaxError "Expected symbol" Nil
+assertSymbol other    = throwError $ SyntaxError "Expected symbol" Nil
 
 flatten :: Expression -> Desugar [AST]
 flatten Nil          = return []
 flatten (Cons a b)   = do head <- desugar a
                           tail <- flatten b
                           return $ head:tail
-flatten v            = throwError $ SyntaxError "Invalid sequence" v
+flatten er           = throwError $ SyntaxError "Invalid sequence" err
