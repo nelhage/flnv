@@ -6,5 +6,10 @@ License-file:        LICENSE
 Author:              Nelson Elhage
 Maintainer:          nelhage@mit.edu
 Build-Depends:       base, mtl, haskell98, parsec
+
 Exposed-Modules:     FLNV
+ghc-options:         -fglasgow-exts
+
+Executable:          repl
+Main-is:             Repl.hs
 ghc-options:         -fglasgow-exts

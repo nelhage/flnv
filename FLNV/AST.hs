@@ -1,8 +1,11 @@
-module FLNV.AST where
+module FLNV.AST (AST(..), desugar, Desugar, runDesugar) where
 
+import FLNV.Env
 import FLNV.Error
 import FLNV.Expression
 import Control.Monad
+import Control.Monad.State
+import Control.Monad.Error hiding (Error)
 
 -- An AST is approximately an Expression, but it makes special forms
 -- and calls explicit. Syntax checking occurs during the translation
@@ -16,37 +19,49 @@ data AST = Define String Expression
          | ABool Bool
          | Quoted Expression
          | Sequence [AST]
-         | Variable String
+         | AVar String
+           deriving Show
 
-specialForms :: (MonadError Error m) => [(String, Expression -> m AST)]
+type DesugarEnv = Env ()
+
+newtype Desugar v = Desugar (StateT DesugarEnv (Either Error) v)
+    deriving (Monad, MonadError Error, MonadState DesugarEnv)
+
+specialForms :: [(String, Expression -> Desugar AST)]
 specialForms = [ ("quote",  desugarQuoted)
                , ("lambda", desugarLambda)
                , ("if",     desugarIf)
                , ("begin",  desugarSequence)]
 
-desugar :: (MonadError Error m) => Expression -> m AST
-desugar (String s) = return $ AString  s
-desugar (Number n) = return $ ANumber  n
-desugar (Bool   b) = return $ ABool    b
-desugar (Symbol v) = return $ Variable v
-desugar (Cons (Symbol form) rest)
-    | Just func <- lookup form specialForms = func rest
+runDesugar :: Desugar x -> Either Error x
+runDesugar (Desugar d) = evalStateT d emptyEnv
+
+desugar :: Expression -> Desugar AST
+desugar (String s) = return $ AString s
+desugar (Number n) = return $ ANumber n
+desugar (Bool   b) = return $ ABool   b
+desugar (Symbol v) = return $ AVar    v
+desugar (Cons (Symbol form) rest) =
+    do binding <- liftM (maybeLookup form) get
+       case binding of
+         Nothing | Just func <- lookup form specialForms -> func rest
+         _  -> liftM (Apply $ AVar form) (flatten rest)
 desugar (Cons what args) = do func <- desugar what
                               argl <- flatten args
                               return $ Apply func argl
 
-desugarQuoted :: (MonadError Error m) => Expression -> m AST
+desugarQuoted :: Expression -> Desugar AST
 desugarQuoted (Cons thing Nil) = return $ Quoted thing
 desugarQuoted form = throwError $ SyntaxError "Malformed quoted form" form
 
-desugarLambda :: (MonadError Error m) => Expression -> m AST
+desugarLambda :: Expression -> Desugar AST
 desugarLambda (Cons args body@(Cons fst rest)) =
     do argl <- (flatten args) >>= mapM assertSymbol
        bexp <- desugarSequence body
        return $ Lambda argl bexp
 desugarLambda form = throwError $ SyntaxError "Malformed Lambda" form
 
-desugarIf :: (MonadError Error m) => Expression -> m AST
+desugarIf :: Expression -> Desugar AST
 desugarIf (Cons predicate (Cons cons tail)) =
     do pAST <- desugar predicate
        cAST <- desugar cons
@@ -57,14 +72,14 @@ desugarIf (Cons predicate (Cons cons tail)) =
                >>= desugar
        return $ If pAST cAST aAST
 
-desugarSequence :: (MonadError Error m) => Expression -> m AST
+desugarSequence :: Expression -> Desugar AST
 desugarSequence = (liftM Sequence) . flatten
 
-assertSymbol :: (MonadError Error m) => AST -> m String
-assertSymbol (Variable s) = return $ s
+assertSymbol :: AST -> Desugar String
+assertSymbol (AVar s) = return $ s
 assertSymbol other = throwError $ SyntaxError "Expected symbol" Nil
 
-flatten :: (MonadError Error m) => Expression -> m [AST]
+flatten :: Expression -> Desugar [AST]
 flatten Nil          = return []
 flatten (Cons a b)   = do head <- desugar a
                           tail <- flatten b

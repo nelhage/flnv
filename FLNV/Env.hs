@@ -1,4 +1,9 @@
-module FLNV.Env (Env, emptyEnv, extendEnv) where
+module FLNV.Env (Env
+                , emptyEnv
+                , extendEnv
+                , addBinding
+                , lookupEnv
+                , maybeLookup) where
 
 import FLNV.Error
 
@@ -19,8 +24,12 @@ addBinding key v (Frame vals parent) = case (lookup key vals) of
                                          Just s  -> throwError $ DuplicateBinding key
 
 lookupEnv :: (MonadError Error m) => String -> Env v -> m v
-lookupEnv key (Frame vals parent) = case (lookup key vals) of
-                                      Nothing -> lookupEnv key parent
-                                      Just s  -> return s
-lookupEnv key EmptyEnvironment = throwError $ Undefined key
+lookupEnv key env = case (maybeLookup key env) of
+                      Nothing -> throwError $ Undefined key
+                      Just s  -> return s
 
+maybeLookup :: String -> Env v -> Maybe v
+maybeLookup key (Frame vals parent) = case (lookup key vals) of
+                                        Nothing -> maybeLookup key parent
+                                        Just s  -> Just s
+maybeLookup key EmptyEnvironment = Nothing
