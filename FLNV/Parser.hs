@@ -10,6 +10,7 @@ data Expression = Symbol String
                 | Bool Bool
                 | Cons Expression Expression
                 | Nil
+                  deriving (Eq)
 
 instance Show Expression where
     show (Symbol s) = s
