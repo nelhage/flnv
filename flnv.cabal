@@ -2,10 +2,10 @@ Name:                flnv
 Version:             0.0
 Description:         Four Letters; No Vowel
 License:             BSD3
-License-file:        LICENSE
 Author:              Nelson Elhage
 Maintainer:          nelhage@mit.edu
-Build-Depends:       base, mtl, haskell98, parsec
+Build-Depends:       base, mtl, haskell98, parsec, array
+Build-Type:          Simple
 
 Exposed-Modules:     FLNV
 ghc-options:         -fglasgow-exts
