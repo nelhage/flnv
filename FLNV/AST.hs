@@ -102,4 +102,4 @@ flatten Nil          = return []
 flatten (Cons a b)   = do head <- desugar a
                           tail <- flatten b
                           return $ head:tail
-flatten er           = throwError $ SyntaxError "Invalid sequence" err
+flatten err          = throwError $ SyntaxError "Invalid sequence" err
