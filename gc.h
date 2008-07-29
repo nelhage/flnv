@@ -1,7 +1,9 @@
 #ifndef __MINISCHEME_GC__
 #define __MINISCHEME_GC__
 
+#include <assert.h>
 #include <stdint.h>
+#include <stdlib.h>
 
 #define UNUSED __attribute__((unused))
 
@@ -48,16 +50,11 @@ void gc_gc();
 void gc_realloc(uint32_t need_mem);
 uint32_t gc_free_mem();
 
+#define MAX_EXTERNAL_ROOTS_FRAME        10
+void gc_register_roots(sc_val *root0, ...);
+void gc_pop_roots();
 
 #define NIL          ((sc_val)0)
 #define NILP(x)      (!(x))
-
-extern sc_val _sc_regs[];
-#define SC_REG(n) _sc_regs[(n)]
-#define SC_NREGS 16
-
-/* The scratch register -- not guaranteed to be preserved across any
-   public function calls. */
-#define SCRATCH         0
 
 #endif /* !defined(__MINISCHEME_GC__)*/

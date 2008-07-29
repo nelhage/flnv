@@ -6,16 +6,19 @@
 
 #define OBARRAY_INITIAL_SIZE 50
 
+sc_val obarray;
+
 void obarray_init() {
-    SC_REG(OBARRAY) = gc_alloc_vector(OBARRAY_INITIAL_SIZE);
+    obarray = gc_alloc_vector(OBARRAY_INITIAL_SIZE);
+    gc_register_roots(&obarray, NULL);
 }
 
 sc_val sc_intern_symbol(char * name) {
     int i;
-    uint32_t len = sc_vector_len(SC_REG(OBARRAY));
+    uint32_t len = sc_vector_len(obarray);
     sc_val v = NIL;
     for(i = 0; i < len; i++) {
-        v = sc_vector_ref(SC_REG(OBARRAY), i);
+        v = sc_vector_ref(obarray, i);
         if(NILP(v)) break;
         if(!strcmp(name, sc_symbol_name(v)))
             return v;
@@ -26,25 +29,28 @@ sc_val sc_intern_symbol(char * name) {
         printf("Obarray realloc forced, new size %d\n", len << 1);
         sc_val oa = gc_alloc_vector(len << 1);
         for(i = 0; i < len; i++) {
-            sc_vector_set(oa, i, sc_vector_ref(SC_REG(OBARRAY),i));
+            sc_vector_set(oa, i, sc_vector_ref(obarray,i));
         }
-        SC_REG(OBARRAY) = oa;
+        obarray = oa;
         i = len;
     }
     v = gc_alloc_symbol(strlen(name));
     strcpy(sc_symbol_name(v), name);
-    sc_vector_set(SC_REG(OBARRAY), i, v);
+    sc_vector_set(obarray, i, v);
     return v;
 }
 
 #ifdef BUILD_TEST
 
 void test_symbol(void) {
-    SC_REG(0) = sc_intern_symbol("hello");
-    SC_REG(1) = sc_intern_symbol("hello");
+    sc_val r0, r1;
+    gc_register_roots(&r0, &r1, NULL);
 
-    assert(!strcmp(sc_symbol_name(SC_REG(0)), "hello"));
-    assert(SC_REG(0) == SC_REG(1));
+    r0 = sc_intern_symbol("hello");
+    r1 = sc_intern_symbol("hello");
+
+    assert(!strcmp(sc_symbol_name(r0), "hello"));
+    assert(r0 == r1);
 
     sc_intern_symbol("a");
     sc_intern_symbol("b");
@@ -62,8 +68,8 @@ void test_symbol(void) {
     sc_intern_symbol("n");
     sc_intern_symbol("o");
 
-    assert(!strcmp(sc_symbol_name(SC_REG(0)), "hello"));
-    assert(SC_REG(0) == SC_REG(1));
+    assert(!strcmp(sc_symbol_name(r0), "hello"));
+    assert(r0 == r1);
 }
 
 #endif

@@ -89,7 +89,11 @@ sc_val sc_read_number(struct in_stream * s) {
 
 sc_val sc_read_symbol(struct in_stream * s) {
     uint32_t mlen = 10;
-    sc_val str = gc_alloc_string(mlen);
+    sc_val str, nstr;
+
+    gc_register_roots(&str, NULL);
+
+    str = gc_alloc_string(mlen);
     char * buf = sc_string(str);
     int i = 0;
     int c;
@@ -100,22 +104,28 @@ sc_val sc_read_symbol(struct in_stream * s) {
             break;
         }
         if(i == mlen) {
-            SC_REG(SCRATCH) = str;
-            mlen <<= 1;
-            str = gc_alloc_string(mlen);
-            strcpy(sc_string(str), sc_string(SC_REG(SCRATCH)));
+            mlen *= 2;
+            nstr = gc_alloc_string(mlen);
+            strcpy(sc_string(nstr), sc_string(str));
+            str = nstr;
             buf = sc_string(str);
         }
         buf[i++] = c;
     }
     sc_val sym = gc_alloc_symbol(sc_strlen(str));
     strcpy(sc_symbol_name(sym), sc_string(str));
+
+    gc_pop_roots();
     return sym;
 }
 
 sc_val sc_read_string(struct in_stream * s) {
     uint32_t mlen = 10;
-    sc_val str = gc_alloc_string(mlen);
+    sc_val str, nstr;
+
+    gc_register_roots(&str, NULL);
+
+    str = gc_alloc_string(mlen);
     char * buf = sc_string(str);
     int i = 0;
     int c;
@@ -134,24 +144,28 @@ sc_val sc_read_string(struct in_stream * s) {
             }
         }
         if(i == mlen) {
-            SC_REG(SCRATCH) = str;
-            mlen <<= 1;
-            str = gc_alloc_string(mlen);
-            strcpy(sc_string(str), sc_string(SC_REG(SCRATCH)));
+            mlen *= 2;
+            nstr = gc_alloc_string(mlen);
+            strcpy(sc_string(nstr), sc_string(str));
+            str = nstr;
             buf = sc_string(str);
         }
         buf[i++] = c;
     }
+    gc_pop_roots();
     return str;
 }
 
 sc_val sc_read_pair(struct in_stream * s, int recursive) {
+    sc_val car, cdr;
+    int c;
+
+    gc_register_roots(&car, &cdr, NULL);
+
     /* Read the car */
-    SC_REG(0) = sc_read_internal(s, 0);
-    /* Save it on the stack */
-    stack_push(STACK, 0);
-    int c = read_getc(s, 1);
-    sc_val cdr;
+    car = sc_read_internal(s, 0);
+
+    c = read_getc(s, 1);
     if(c == '.') {
         /* Read a dotted pair */
         cdr = sc_read_internal(s, 0);
@@ -164,11 +178,13 @@ sc_val sc_read_pair(struct in_stream * s, int recursive) {
         s->ungetc(s, c);
         cdr = sc_read_pair(s, 1);
     }
-    SC_REG(0) = cdr;
+
     sc_val pair = gc_alloc_cons();
-    sc_set_car(pair, stack_pop(STACK));
-    sc_set_cdr(pair, SC_REG(0));
+    sc_set_car(pair, car);
+    sc_set_cdr(pair, cdr);
     c = s->getc(s);
+    gc_pop_roots();
+
     if(c == ')') {
         if(recursive) s->ungetc(s, c);
         return pair;

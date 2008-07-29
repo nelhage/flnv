@@ -11,8 +11,6 @@ extern void test_symbol();
 int main() {
     gc_init();
     obarray_init();
-    
-    SC_REG(STACK) = stack_new();
 
     test_gc();
     test_read();
