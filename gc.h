@@ -3,9 +3,10 @@
 
 #include <stdint.h>
 
+#define UNUSED __attribute__((unused))
+
 typedef intptr_t sc_int;
 typedef uintptr_t* sc_val;
-
 
 /* Accesors */
 

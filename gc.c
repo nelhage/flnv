@@ -44,12 +44,16 @@ static uintptr_t mem_size;
         (typeof(a)) (ROUNDDOWN((uint32_t) (a) + __n - 1, __n)); \
 })
 
+enum {
+    TYPE_SYMBOL,
+    TYPE_STRING,
+    TYPE_CONS,
+    TYPE_VECTOR,
+    TYPE_MAX,
+    TYPE_BROKEN_HEART = (uint8_t)-1
+};
 
-#define TYPE_SYMBOL        1
-#define TYPE_STRING        2
-#define TYPE_CONS          3
-#define TYPE_VECTOR        4
-#define TYPE_BROKEN_HEART  ((uint8_t)-1)
+/* Public interfaces */
 
 typedef struct gc_chunk {
     uint8_t type;
@@ -244,11 +248,57 @@ void gc_init() {
     sc_root = gc_alloc_vector(SC_NREGS);
 }
 
+/* GC internals */
+
+typedef struct gc_ops {
+    void (*op_relocate)(gc_chunk *val);
+    uint32_t (*op_len)(gc_chunk *val);
+} gc_ops;
+
+sc_val gc_relocate(sc_val v);
+
+void gc_relocate_nop(gc_chunk *val UNUSED) {
+    /* nop */
+}
+
+void gc_relocate_cons(gc_chunk *v) {
+    gc_cons *cons = (gc_cons*)v;
+    cons->car = gc_relocate(cons->car);
+    cons->cdr = gc_relocate(cons->cdr);
+}
+
+void gc_relocate_vector(gc_chunk *v) {
+    uint32_t i;
+    gc_vector *vec = (gc_vector*)v;
+
+    for(i = 0; i < vec->header.extra; i++) {
+        vec->vector[i] = gc_relocate(vec->vector[i]);
+    }
+}
+
+uint32_t gc_len_string(gc_chunk *v) {
+    return STRLEN2CELLS(v->extra);
+}
+
+uint32_t gc_len_cons(gc_chunk *v UNUSED) {
+    return 2;
+}
+
+uint32_t gc_len_vector(gc_chunk *v) {
+    return MAX(v->extra, 1);
+}
+
+gc_ops gc_op_table[TYPE_MAX] = {
+    [TYPE_SYMBOL] {gc_relocate_nop, gc_len_string},
+    [TYPE_STRING] {gc_relocate_nop, gc_len_string},
+    [TYPE_CONS]   {gc_relocate_cons, gc_len_cons},
+    [TYPE_VECTOR] {gc_relocate_vector, gc_len_vector},
+};
 
 sc_val gc_relocate(sc_val v) {
     int len;
     uintptr_t *reloc;
-    uint32_t type;
+    int type;
     gc_chunk *val;
 
     if(NUMBERP(v) || NILP(v)) return v;
@@ -259,21 +309,9 @@ sc_val gc_relocate(sc_val v) {
         return val->data[0];
     }
 
-    switch(type) {
-    case TYPE_STRING:
-    case TYPE_SYMBOL:
-        len = (STRLEN2CELLS(val->extra) + 1);
-        break;
-    case TYPE_CONS:
-        len = 3;
-        break;
-    case TYPE_VECTOR:
-        len = MAX(val->extra,1) + 1;
-        break;
-    default:
-        printf("Trying to relocate unknown data: %d!\n", type);
-        return NULL;
-    }
+    assert(type < TYPE_MAX);
+
+    len = gc_op_table[type].op_len(val) + 1;
 
     reloc = gc_alloc(len);
     memcpy(reloc, val, sizeof(uintptr_t) * len);
@@ -295,7 +333,6 @@ void gc_gc() {
     printf("Entering garbage collection...");
     uint32_t *scan;
     uint32_t *t;
-    uint32_t len;
 
     t = working_mem;
     working_mem = free_mem;
@@ -307,37 +344,11 @@ void gc_gc() {
     while(scan != free_ptr) {
         gc_chunk *chunk = (gc_chunk*)scan;
 
-        switch(chunk->type) {
-        case TYPE_SYMBOL:
-        case TYPE_STRING:
-            scan += STRLEN2CELLS(chunk->extra) + 1;
-            break;
+        assert(chunk->type < TYPE_MAX);
 
-        case TYPE_CONS: {
-            gc_cons *cons = (gc_cons*)chunk;
-            cons->car = gc_relocate(cons->car);
-            cons->cdr = gc_relocate(cons->cdr);
-            scan += 3;
-            break;
-        }
+        gc_op_table[chunk->type].op_relocate(chunk);
+        scan += gc_op_table[chunk->type].op_len(chunk) + 1;
 
-        case TYPE_VECTOR: {
-            gc_vector *vec = (gc_vector*)chunk;
-            uint32_t i;
-
-            len = vec->header.extra;
-            scan++;
-            if(len == 0) scan++;
-            for(i = 0; i < len; i++) {
-                vec->vector[i] = gc_relocate(vec->vector[i]);
-            }
-            scan += len;
-            break;
-        }
-        default:
-            printf("GC internal error -- invalid %08x at %p!\n", *scan, scan);
-            exit(-1);
-        }
         if(scan > working_mem + mem_size) {
             printf("GC internal error -- ran off the end of memory!\n");
             exit(-1);
