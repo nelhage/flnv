@@ -11,7 +11,7 @@ readExpr s = case parse sExpression "scheme" s of
                Right val -> return val
 
 symbolChar :: Parser Char
-symbolChar = oneOf "*!$?<>=/+:_{}#" <|> letter
+symbolChar = oneOf "*!$?<>=/+:_{}#-" <|> letter
 
 parseSymbol :: Parser Expression
 parseSymbol = do first <- symbolChar <?> "symbol"
