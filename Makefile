@@ -12,3 +12,6 @@ $(TEST): $(TEST_OBJECTS)
 
 clean:
 	rm -f *.o $(TEST)
+
+check-syntax:
+	$(CC) $(CCFLAGS) -Wall -Wextra -fsyntax-only $(CHK_SOURCES)
