@@ -17,18 +17,18 @@ static uintptr_t * free_mem;
 static uintptr_t * free_ptr;
 static uintptr_t mem_size;
 
-#define TAG_NUMBER(x)  ((x)<<1 | 0x1)
-#define TAG_POINTER(x) (x)
+#define TAG_NUMBER(x)  (uint32_t)((x)<<1 | 0x1)
+#define TAG_POINTER(x) ((sc_val)(x))
 
 #define NUMBERP(x) ((uintptr_t)(x)&0x1)
 #define POINTERP(x)  (!NUMBERP(x))
 
-#define UNTAG_PTR(c) (c)
+#define UNTAG_PTR(c, t) ((t*)c)
 #define UNTAG_NUMBER(c) (((sc_int)(c))>>1)
 
 #define MAX(a,b) (((a)>(b))?(a):(b))
 
-#define STRLEN2CELLS(x) (ROUNDUP((x),sizeof(sc_val))/sizeof(sc_val))
+#define STRLEN2CELLS(x) (ROUNDUP(((uint32_t)x),sizeof(sc_val))/sizeof(sc_val))
 
 // Rounding operations (efficient when n is a power of 2)
 // Round down to the nearest multiple of n
@@ -45,52 +45,72 @@ static uintptr_t mem_size;
 })
 
 
-#define TYPE_SYMBOL 1
-#define TYPE_STRING 2
-#define TYPE_CONS   3
-#define TYPE_VECTOR 4
+#define TYPE_SYMBOL        1
+#define TYPE_STRING        2
+#define TYPE_CONS          3
+#define TYPE_VECTOR        4
+#define TYPE_BROKEN_HEART  ((uint8_t)-1)
 
-#define TYPE_BITS   3
+typedef struct gc_chunk {
+    uint8_t type;
+    uint32_t extra : 24;
+    sc_val  data[0];
+} gc_chunk;
 
-#define TYPE(x) (((uintptr_t)(x)) & ((1 << TYPE_BITS) - 1))
-#define ADD_TYPE(x,t) ((sc_val)(((uintptr_t)(x) << TYPE_BITS) | t))
-#define REMOVE_TYPE(x) ((uintptr_t)(x) >> TYPE_BITS)
+typedef struct gc_cons {
+    gc_chunk header;
+    sc_val   car;
+    sc_val   cdr;
+} gc_cons;
 
-#define BROKEN_HEART ((uintptr_t)0xffffffff)
+typedef struct gc_symbol {
+    gc_chunk header;
+    char name[0];
+} gc_symbol;
+
+typedef struct gc_string {
+    gc_chunk header;
+    char string[0];
+} gc_string;
+
+typedef struct gc_vector {
+    gc_chunk header;
+    sc_val   vector[0];
+} gc_vector;
 
 sc_val sc_car(sc_val c) {
     assert(sc_consp(c));
-    return (sc_val)(*(UNTAG_PTR(c)+1));
+    return UNTAG_PTR(c, gc_cons)->car;
 }
 
 sc_val sc_cdr(sc_val c) {
     assert(sc_consp(c));
-    return (sc_val)(*(UNTAG_PTR(c)+2));
+    return UNTAG_PTR(c, gc_cons)->cdr;
 }
 
 void sc_set_car(sc_val c, sc_val val) {
     assert(sc_consp(c));
-    *(UNTAG_PTR(c)+1) = (uintptr_t)(val);
+    UNTAG_PTR(c, gc_cons)->car = val;
 }
 
 void sc_set_cdr(sc_val c, sc_val val) {
     assert(sc_consp(c));
-    *(UNTAG_PTR(c)+2) = (uintptr_t)(val);
+    UNTAG_PTR(c, gc_cons)->cdr = val;
 }
 
 char * sc_string(sc_val c) {
     assert(sc_stringp(c));
-    return (char*)(UNTAG_PTR(c) + 1);
+    return UNTAG_PTR(c, gc_string)->string;
 }
 
 char * sc_symbol_name(sc_val c) {
     assert(sc_symbolp(c));
-    return (char*)(UNTAG_PTR(c) + 1);
+    return UNTAG_PTR(c, gc_symbol)->name;
 }
 
 uint32_t sc_strlen(sc_val c) {
     assert(sc_stringp(c));
-    return REMOVE_TYPE(*(UNTAG_PTR(c)));
+    return UNTAG_PTR(c, gc_string)->header.extra;
 }
 
 sc_int sc_number(sc_val n) {
@@ -104,26 +124,26 @@ sc_val sc_make_number(sc_int n) {
 
 uint32_t sc_vector_len(sc_val v) {
     assert(sc_vectorp(v));
-    return REMOVE_TYPE(*UNTAG_PTR(v));
+    return UNTAG_PTR(v, gc_vector)->header.extra;
 }
 
 sc_val sc_vector_ref(sc_val v, uint32_t n) {
     assert(sc_vectorp(v));
     assert(n < sc_vector_len(v));
-    return (sc_val)*(UNTAG_PTR(v) + n + 1);
+    return UNTAG_PTR(v, gc_vector)->vector[n];
 }
 
 void sc_vector_set(sc_val v, uint32_t n, sc_val x) {
     assert(sc_vectorp(v));
     assert(n < sc_vector_len(v));
-    *(UNTAG_PTR(v) + n + 1) = (uintptr_t)x;
+    UNTAG_PTR(v, gc_vector)->vector[n] = x;
 }
 
 /* Predicates */
 static inline int sc_pointer_typep(sc_val c, uint32_t type) {
     return POINTERP(c)
         && !NILP(c)
-        && TYPE(*UNTAG_PTR(c)) == type;
+        && UNTAG_PTR(c, gc_chunk)->type == type;
 }
 
 int sc_consp(sc_val c) {
@@ -151,30 +171,32 @@ int sc_numberp(sc_val c) {
 uintptr_t * gc_alloc(uint32_t n);
 
 sc_val gc_alloc_cons() {
-    uintptr_t * p = gc_alloc(3);
-    *p = TYPE_CONS;
-    *(p + 1) = *(p + 2) = (uintptr_t)NIL;
-    return TAG_POINTER(p);
+    gc_cons *cons = (gc_cons*)gc_alloc(3);
+    cons->header.type = TYPE_CONS;
+    cons->car = cons->cdr = NIL;
+    return TAG_POINTER(cons);
 }
 
 sc_val gc_alloc_string(uint32_t len) {
-    uintptr_t * p = gc_alloc(STRLEN2CELLS(len) + 1);
-    *p = (uintptr_t)ADD_TYPE(len, TYPE_STRING);
-    return TAG_POINTER(p);
+    gc_string *str = (gc_string*)gc_alloc(STRLEN2CELLS(len) + 1);
+    str->header.type = TYPE_STRING;
+    str->header.extra = len;
+    return TAG_POINTER(str);
 }
 
 sc_val gc_alloc_vector(uint32_t len) {
-    uintptr_t * p = gc_alloc(MAX(len,1)+1);
-    *p = (uintptr_t)ADD_TYPE(len, TYPE_VECTOR);
-    memset(p+1, 0, len * sizeof(sc_val));
-    return TAG_POINTER(p);
+    gc_vector *vec = (gc_vector*)gc_alloc(MAX(len,1)+1);
+    vec->header.type = TYPE_VECTOR;
+    vec->header.extra = len;
+    memset(vec->vector, 0, len * sizeof(sc_val));
+    return TAG_POINTER(vec);
 }
 
 sc_val gc_alloc_symbol(uint32_t len) {
     /* XXX FIXME: This should be refactored better */
-    sc_val v = gc_alloc_string(len);
-    *(UNTAG_PTR(v)) = (uintptr_t)ADD_TYPE(REMOVE_TYPE(*(UNTAG_PTR(v))), TYPE_SYMBOL);
-    return v;
+    gc_symbol *sym = UNTAG_PTR(gc_alloc_string(len), gc_symbol);
+    sym->header.type = TYPE_SYMBOL;
+    return TAG_POINTER(sym);
 }
 
 sc_val gc_make_string(char * string) {
@@ -225,26 +247,28 @@ void gc_init() {
 
 sc_val gc_relocate(sc_val v) {
     int len;
-    uintptr_t * ptr, *reloc;
+    uintptr_t *reloc;
     uint32_t type;
-    if(NUMBERP(v) || NILP(v)) return v;
-    ptr = UNTAG_PTR(v);
-    type = TYPE(*ptr);
+    gc_chunk *val;
 
-    if(BROKEN_HEART == *ptr) {
-        return (sc_val)*(ptr + 1);
+    if(NUMBERP(v) || NILP(v)) return v;
+    val = UNTAG_PTR(v, gc_chunk);
+    type = val->type;
+
+    if(TYPE_BROKEN_HEART == type) {
+        return val->data[0];
     }
 
     switch(type) {
     case TYPE_STRING:
     case TYPE_SYMBOL:
-        len = (STRLEN2CELLS(REMOVE_TYPE(*ptr)) + 1);
+        len = (STRLEN2CELLS(val->extra) + 1);
         break;
     case TYPE_CONS:
         len = 3;
         break;
     case TYPE_VECTOR:
-        len = MAX(REMOVE_TYPE(*ptr),1) + 1;
+        len = MAX(val->extra,1) + 1;
         break;
     default:
         printf("Trying to relocate unknown data: %d!\n", type);
@@ -252,10 +276,10 @@ sc_val gc_relocate(sc_val v) {
     }
 
     reloc = gc_alloc(len);
-    memcpy(reloc, ptr, sizeof(uintptr_t) * len);
-    *ptr = BROKEN_HEART;
-    *(ptr + 1) = (uintptr_t)(reloc);
-    return (sc_val)*(ptr + 1);
+    memcpy(reloc, val, sizeof(uintptr_t) * len);
+    val->type = TYPE_BROKEN_HEART;
+    val->data[0] = reloc;
+    return reloc;
 }
 
 void gc_protect_roots() {
@@ -269,7 +293,8 @@ void gc_protect_roots() {
 void gc_gc() {
     uint32_t old_avail = gc_free_mem();
     printf("Entering garbage collection...");
-    uintptr_t *scan, *t;
+    uint32_t *scan;
+    uint32_t *t;
     uint32_t len;
 
     t = working_mem;
@@ -280,27 +305,37 @@ void gc_gc() {
     gc_protect_roots();
 
     while(scan != free_ptr) {
-        switch(TYPE(*scan)) {
+        gc_chunk *chunk = (gc_chunk*)scan;
+
+        switch(chunk->type) {
         case TYPE_SYMBOL:
         case TYPE_STRING:
-            scan += STRLEN2CELLS(REMOVE_TYPE(*scan)) + 1;
+            scan += STRLEN2CELLS(chunk->extra) + 1;
             break;
-        case TYPE_CONS:
-            *(scan+1) = (uintptr_t)gc_relocate((sc_val)*(scan+1));
-            *(scan+2) = (uintptr_t)gc_relocate((sc_val)*(scan+2));
+
+        case TYPE_CONS: {
+            gc_cons *cons = (gc_cons*)chunk;
+            cons->car = gc_relocate(cons->car);
+            cons->cdr = gc_relocate(cons->cdr);
             scan += 3;
             break;
-        case TYPE_VECTOR:
-            len = REMOVE_TYPE(*scan);
+        }
+
+        case TYPE_VECTOR: {
+            gc_vector *vec = (gc_vector*)chunk;
+            uint32_t i;
+
+            len = vec->header.extra;
             scan++;
             if(len == 0) scan++;
-            while(len--) {
-                *scan = (uintptr_t)gc_relocate((sc_val)*scan);
-                scan++;
+            for(i = 0; i < len; i++) {
+                vec->vector[i] = gc_relocate(vec->vector[i]);
             }
+            scan += len;
             break;
+        }
         default:
-            printf("GC internal error -- invalid %p at %p!\n", *scan, (uintptr_t)scan);
+            printf("GC internal error -- invalid %08x at %p!\n", *scan, scan);
             exit(-1);
         }
         if(scan > working_mem + mem_size) {
