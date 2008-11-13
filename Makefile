@@ -3,11 +3,14 @@ OBJECTS=gc.o symbol.o stack.o read.o
 
 TEST_OBJECTS=$(OBJECTS) test.o
 TEST_CFLAGS=-DBUILD_TEST
-TEST=test
+TESTER=tester
 
-all: $(TEST)
+all: $(TESTER)
 
-$(TEST): $(TEST_OBJECTS)
+test: $(TESTER)
+	./$<
+
+$(TESTER): $(TEST_OBJECTS)
 	gcc -o $@ $(TEST_OBJECTS) $(LDFLAGS)
 
 clean:
