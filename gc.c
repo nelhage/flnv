@@ -264,7 +264,7 @@ typedef struct gc_ops {
     uint32_t (*op_len)(gc_chunk *val);
 } gc_ops;
 
-sc_val gc_relocate(sc_val v);
+void gc_relocate(sc_val *v);
 
 void gc_relocate_nop(gc_chunk *val UNUSED) {
     /* nop */
@@ -272,8 +272,8 @@ void gc_relocate_nop(gc_chunk *val UNUSED) {
 
 void gc_relocate_cons(gc_chunk *v) {
     gc_cons *cons = (gc_cons*)v;
-    cons->car = gc_relocate(cons->car);
-    cons->cdr = gc_relocate(cons->cdr);
+    gc_relocate(&cons->car);
+    gc_relocate(&cons->cdr);
 }
 
 void gc_relocate_vector(gc_chunk *v) {
@@ -281,7 +281,7 @@ void gc_relocate_vector(gc_chunk *v) {
     gc_vector *vec = (gc_vector*)v;
 
     for(i = 0; i < vec->header.extra; i++) {
-        vec->vector[i] = gc_relocate(vec->vector[i]);
+        gc_relocate(&vec->vector[i]);
     }
 }
 
@@ -289,10 +289,10 @@ void gc_relocate_external_roots(gc_chunk *v) {
     uint32_t i;
     gc_external_roots *r = (gc_external_roots*)v;
 
-    r->next_frame = gc_relocate(r->next_frame);
+    gc_relocate(&r->next_frame);
 
     for(i = 0; i < r->header.extra; i++) {
-        *r->roots[i] = gc_relocate(*r->roots[i]);
+        gc_relocate(r->roots[i]);
     }
 }
 
@@ -354,18 +354,19 @@ void gc_pop_roots() {
     sc_root_stack = UNTAG_PTR(sc_root_stack, gc_external_roots)->next_frame;
 }
 
-sc_val gc_relocate(sc_val v) {
+void gc_relocate(sc_val *v) {
     int len;
     uintptr_t *reloc;
     int type;
     gc_chunk *val;
 
-    if(NUMBERP(v) || NILP(v)) return v;
-    val = UNTAG_PTR(v, gc_chunk);
+    if(NUMBERP(*v) || NILP(*v)) return;
+    val = UNTAG_PTR(*v, gc_chunk);
     type = val->type;
 
     if(TYPE_BROKEN_HEART == type) {
-        return val->data[0];
+        *v = val->data[0];
+        return;
     }
 
     assert(type < TYPE_MAX);
@@ -375,12 +376,11 @@ sc_val gc_relocate(sc_val v) {
     reloc = gc_alloc(len);
     memcpy(reloc, val, sizeof(uintptr_t) * len);
     val->type = TYPE_BROKEN_HEART;
-    val->data[0] = reloc;
-    return reloc;
+    *v = val->data[0] = reloc;
 }
 
 void gc_protect_roots() {
-    sc_root_stack = gc_relocate(sc_root_stack);
+    gc_relocate(&sc_root_stack);
 }
 
 void gc_gc() {
