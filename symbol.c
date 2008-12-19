@@ -44,6 +44,9 @@ sc_val sc_intern_symbol(char * name) {
 
 void test_symbol(void) {
     sc_val r0, r1;
+    char str[2] = "a";
+    int i;
+
     gc_register_roots(&r0, &r1, NULL);
 
     r0 = sc_intern_symbol("hello");
@@ -52,21 +55,13 @@ void test_symbol(void) {
     assert(!strcmp(sc_symbol_name(r0), "hello"));
     assert(r0 == r1);
 
-    sc_intern_symbol("a");
-    sc_intern_symbol("b");
-    sc_intern_symbol("c");
-    sc_intern_symbol("d");
-    sc_intern_symbol("e");
-    sc_intern_symbol("f");
-    sc_intern_symbol("g");
-    sc_intern_symbol("h");
-    sc_intern_symbol("i");
-    sc_intern_symbol("j");
-    sc_intern_symbol("k");
-    sc_intern_symbol("l");
-    sc_intern_symbol("m");
-    sc_intern_symbol("n");
-    sc_intern_symbol("o");
+    /* Intern a lot of junk to force an obarray realloc */
+    for(i = 0; i < 26; i++) {
+        str[0] = 'a' + i;
+        sc_intern_symbol(str);
+        str[0] = 'A' + i;
+        sc_intern_symbol(str);
+    }
 
     assert(!strcmp(sc_symbol_name(r0), "hello"));
     assert(r0 == r1);
