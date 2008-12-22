@@ -157,7 +157,7 @@ sc_val sc_read_string(struct in_stream * s) {
 }
 
 sc_val sc_read_pair(struct in_stream * s, int recursive) {
-    sc_val car, cdr;
+    sc_val car = NIL, cdr = NIL;
     int c;
 
     gc_register_roots(&car, &cdr, NULL);

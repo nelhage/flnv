@@ -12,6 +12,10 @@ static uintptr_t * free_mem;
 static uintptr_t * free_ptr;
 static uintptr_t mem_size;
 
+#ifdef TEST_STRESS_GC
+static int in_gc = 0;
+#endif
+
 static sc_val sc_root_stack    = NIL;
 static sc_val gc_root_hooks = NIL;
 
@@ -222,6 +226,11 @@ sc_val gc_make_string(char * string) {
 
 uintptr_t * gc_alloc(uint32_t n) {
     if(free_ptr - working_mem + n + MAX_FRAME_SIZE <= mem_size) {
+#ifdef TEST_STRESS_GC
+        if(!in_gc) {
+            gc_gc();
+        }
+#endif
         /* We have enough space in working memory */
         uintptr_t * p = free_ptr;
         free_ptr += n;
@@ -331,8 +340,22 @@ void gc_register_roots(sc_val* root0, ...) {
 
     assert(nroots <= MAX_EXTERNAL_ROOTS_FRAME);
 
+    /*
+     * Because the roots may already be live, we can't perform GC
+     * until we've safely registered them. gc_alloc will ensure we
+     * always have space to allocate new roots, and we set in_gc to
+     * true to force gc_alloc not to do a gc_gc() even if we're in
+     * stress-testing mode.
+     */
+    assert(gc_free_mem() >= sizeof *frame + nroots * sizeof(sc_val*));
+#ifdef TEST_STRESS_GC
+    in_gc = 1;
+#endif
     frame = (gc_external_roots*)gc_alloc(sizeof *frame +
                                          nroots * sizeof(sc_val*));
+#ifdef TEST_STRESS_GC
+    in_gc = 0;
+#endif
 
     frame->header.type = TYPE_EXTERNAL_ROOTS;
     frame->header.extra = nroots;
@@ -406,10 +429,19 @@ void gc_gc() {
     uint32_t *scan;
     uint32_t *t;
 
+#ifdef TEST_STRESS_GC
+    if(in_gc) {
+        printf("GC internal error -- recursive GC!\n");
+        abort();
+    }
+    in_gc = 1;
+#endif
+
     t = working_mem;
     working_mem = free_mem;
-    scan = free_ptr = working_mem;
     free_mem = t;
+
+    scan = free_ptr = working_mem;
 
     gc_protect_roots();
 
@@ -423,9 +455,13 @@ void gc_gc() {
 
         if(scan > working_mem + mem_size) {
             printf("GC internal error -- ran off the end of memory!\n");
-            exit(-1);
+            abort();
         }
     }
+
+#ifdef TEST_STRESS_GC
+    in_gc = 0;
+#endif
 
     /* Zero the old free memory to help catch code that accidentally
        holds onto sc_val's during GC.*/

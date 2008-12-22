@@ -29,7 +29,7 @@ sc_val stack_pop(sc_val stack) {
 #include <assert.h>
 
 void test_stack() {
-    sc_val stack, val;
+    sc_val stack = NIL, val = NIL;
     gc_register_roots(&stack, &val, NULL);
 
     stack = stack_new();
