@@ -1,5 +1,5 @@
 CFLAGS=-g -Wall $(DEFS) $(TEST_CFLAGS)
-OBJECTS=gc.o symbol.o stack.o read.o
+OBJECTS=gc.o symbol.o read.o
 
 TEST_OBJECTS=$(OBJECTS) test.o
 TEST_CFLAGS=-DBUILD_TEST
