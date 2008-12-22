@@ -54,6 +54,11 @@ uint32_t gc_free_mem();
 void gc_register_roots(sc_val *root0, ...);
 void gc_pop_roots();
 
+typedef void gc_hook(void);
+void gc_register_gc_root_hook(gc_hook *);
+
+void gc_relocate(sc_val *v);
+
 #define NIL          ((sc_val)0)
 #define NILP(x)      (!(x))
 

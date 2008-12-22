@@ -7,14 +7,15 @@
 /* Constants */
 #define GC_INITIAL_MEM  1024
 
-static sc_val sc_root_stack;
-
 static uintptr_t * working_mem;
 static uintptr_t * free_mem;
 static uintptr_t * free_ptr;
 static uintptr_t mem_size;
 
-#define TAG_NUMBER(x)  (uint32_t)((x)<<1 | 0x1)
+static sc_val sc_root_stack    = NIL;
+static sc_val gc_root_hooks = NIL;
+
+#define TAG_NUMBER(x)  ((sc_val)((x)<<1 | 0x1))
 #define TAG_POINTER(x) ((sc_val)(x))
 
 #define NUMBERP(x) ((uintptr_t)(x)&0x1)
@@ -254,7 +255,7 @@ void gc_init() {
     free_ptr = working_mem;
     mem_size = GC_INITIAL_MEM;
 
-    sc_root_stack = NIL;
+    gc_register_roots(&gc_root_hooks, NULL);
 }
 
 /* GC internals */
@@ -263,8 +264,6 @@ typedef struct gc_ops {
     void (*op_relocate)(gc_chunk *val);
     uint32_t (*op_len)(gc_chunk *val);
 } gc_ops;
-
-void gc_relocate(sc_val *v);
 
 void gc_relocate_nop(gc_chunk *val UNUSED) {
     /* nop */
@@ -354,14 +353,27 @@ void gc_pop_roots() {
     sc_root_stack = UNTAG_PTR(sc_root_stack, gc_external_roots)->next_frame;
 }
 
+void gc_register_gc_root_hook(gc_hook *hook) {
+    sc_val pair = gc_alloc_cons();
+    sc_set_cdr(pair, gc_root_hooks);
+    sc_set_car(pair, TAG_POINTER(hook));
+    gc_root_hooks = pair;
+}
+
 void gc_relocate(sc_val *v) {
     int len;
     uintptr_t *reloc;
     int type;
     gc_chunk *val;
 
-    if(NUMBERP(*v) || NILP(*v)) return;
+    if(NUMBERP(*v))
+        return;
     val = UNTAG_PTR(*v, gc_chunk);
+
+    if((uintptr_t*)val < free_mem
+       || (uintptr_t*)val >= (free_mem + mem_size)) {
+        return;
+    }
     type = val->type;
 
     if(TYPE_BROKEN_HEART == type) {
@@ -380,7 +392,12 @@ void gc_relocate(sc_val *v) {
 }
 
 void gc_protect_roots() {
+    sc_val hook = gc_root_hooks;
     gc_relocate(&sc_root_stack);
+    while(!NILP(hook)) {
+        UNTAG_PTR(sc_car(hook), gc_hook)();
+        hook = sc_cdr(hook);
+    }
 }
 
 void gc_gc() {
@@ -441,9 +458,20 @@ uint32_t gc_free_mem() {
 
 #ifdef BUILD_TEST
 
+static int gc_count = 0;
+
+static sc_val external_root = NIL;
+
+void gc_reloc_external() {
+    gc_count++;
+    gc_relocate(&external_root);
+}
+
 void test_gc(void) {
+    int c;
     sc_val reg;
     gc_register_roots(&reg, NULL);
+    gc_register_gc_root_hook(gc_reloc_external);
 
     reg = gc_alloc_cons();
     sc_val t = sc_make_number(32);
@@ -463,7 +491,9 @@ void test_gc(void) {
     assert(!strcmp(sc_string(sc_car(sc_cdr(reg))),"Hello, World\n"));
     assert(NILP(sc_cdr(sc_cdr(reg))));
 
+    c = gc_count;
     gc_gc();
+    assert(c + 1 == gc_count);
 
     assert(sc_numberp(sc_car(reg)));
     assert(sc_number(sc_car(reg)) == 32);
@@ -474,8 +504,10 @@ void test_gc(void) {
 
     sc_set_car(reg, NIL);
     sc_set_cdr(reg, NIL);
-    gc_gc();
 
+    c = gc_count;
+    gc_gc();
+    assert(c + 1 == gc_count);
 
     t = gc_alloc_cons();
     sc_set_car(t, t);
@@ -487,14 +519,20 @@ void test_gc(void) {
     assert(sc_cdr(sc_car(reg)) == reg);
     assert(sc_car(reg) == sc_cdr(reg));
 
+    c = gc_count;
     gc_gc();
+    assert(c + 1 == gc_count);
 
     assert(sc_car(sc_car(reg)) == sc_car(reg));
     assert(sc_cdr(sc_car(reg)) == reg);
     assert(sc_car(reg) == sc_cdr(reg));
 
     reg = NIL;
+
+    c = gc_count;
     gc_gc();
+    assert(c + 1 == gc_count);
+
     reg = gc_alloc_cons();
 
     t = gc_alloc_vector(10);
@@ -531,6 +569,16 @@ void test_gc(void) {
             assert(sc_vector_ref(t, j) == sc_car(reg));
         }
     }
+
+    external_root = gc_alloc_cons();
+    sc_set_car(external_root, external_root);
+    sc_set_cdr(external_root, NIL);
+
+    gc_gc();
+
+    assert(sc_consp(external_root));
+    assert(sc_consp(sc_car(external_root)));
+    assert(external_root == sc_car(external_root));
 
     for(i=0;i<2000;i++) {
         gc_alloc_cons();
