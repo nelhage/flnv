@@ -508,19 +508,17 @@ void gc_reloc_external() {
 
 void test_gc(void) {
     int c;
-    sc_val reg;
-    gc_register_roots(&reg, NULL);
+    uint32_t free_mem;
+    sc_val reg = NIL, reg2 = NIL;
+    sc_val t = NIL;
+    gc_register_roots(&reg, &t, NULL);
     gc_register_gc_root_hook(gc_reloc_external);
 
     reg = gc_alloc_cons();
-    sc_val t = sc_make_number(32);
-    sc_set_car(reg, t);
-    t = gc_alloc_cons();
-    sc_set_cdr(reg, t);
-    sc_val n = gc_make_string("Hello, World\n");
+    sc_set_car(reg, sc_make_number(32));
+    sc_set_cdr(reg, gc_alloc_cons());
     t = sc_cdr(reg);
-
-    sc_set_car(t, n);
+    sc_set_car(t, gc_make_string("Hello, World\n"));
     sc_set_cdr(t, NIL);
 
     assert(sc_numberp(sc_car(reg)));
@@ -544,9 +542,13 @@ void test_gc(void) {
     sc_set_car(reg, NIL);
     sc_set_cdr(reg, NIL);
 
+    free_mem = gc_free_mem();
     c = gc_count;
     gc_gc();
     assert(c + 1 == gc_count);
+#ifndef TEST_STRESS_GC
+    assert(gc_free_mem() > free_mem);
+#endif
 
     t = gc_alloc_cons();
     sc_set_car(t, t);
@@ -568,14 +570,17 @@ void test_gc(void) {
 
     reg = NIL;
 
+    free_mem = gc_free_mem();
     c = gc_count;
     gc_gc();
     assert(c + 1 == gc_count);
+#ifndef TEST_STRESS_GC
+    assert(gc_free_mem() > free_mem);
+#endif
 
     reg = gc_alloc_cons();
 
-    t = gc_alloc_vector(10);
-    sc_set_car(reg, t);
+    sc_set_car(reg, gc_alloc_vector(10));
     sc_set_cdr(reg, NIL);
 
     int i, j;
@@ -624,6 +629,19 @@ void test_gc(void) {
     }
 
     gc_alloc_vector(0x2000);
+
+    reg = gc_alloc_cons();
+    sc_set_car(reg, NIL);
+    sc_set_cdr(reg, NIL);
+
+    reg2 = reg;
+
+    gc_register_roots(&reg2);
+    gc_gc();
+    assert(reg == reg2);
+    gc_pop_roots();
+    gc_gc();
+    assert(reg != reg2);
 
     gc_pop_roots();
 }
