@@ -16,7 +16,7 @@ static uintptr_t mem_size;
 static int in_gc = 0;
 #endif
 
-static sc_val sc_root_stack    = NIL;
+static sc_val sc_root_stack = NIL;
 static sc_val gc_root_hooks = NIL;
 
 #define TAG_NUMBER(x)  ((sc_val)((x)<<1 | 0x1))
@@ -28,7 +28,10 @@ static sc_val gc_root_hooks = NIL;
 #define UNTAG_PTR(c, t) ((t*)c)
 #define UNTAG_NUMBER(c) (((sc_int)(c))>>1)
 
-#define MAX(a,b) (((a)>(b))?(a):(b))
+#define MAX(a,b)                          \
+    ({  typeof (a) _a = (a);              \
+        typeof (b) _b = (b);              \
+        _a > _b ? _a : _b; })
 
 #define STRLEN2CELLS(x) (ROUNDUP(((uint32_t)x),sizeof(sc_val))/sizeof(sc_val))
 
@@ -313,7 +316,7 @@ uint32_t gc_len_cons(gc_chunk *v UNUSED) {
 }
 
 uint32_t gc_len_vector(gc_chunk *v) {
-    return MAX(v->extra, 1);
+    return MAX((uint32_t)v->extra, 1);
 }
 
 uint32_t gc_len_external_roots(gc_chunk *v) {
