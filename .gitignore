@@ -1,3 +1,22 @@
 dist/
 tester
 *~
+
+# God I hate automake
+
+Makefile.in
+aclocal.m4
+autom4te.cache
+build/
+config.h
+config.h.in
+config.log
+config.status
+configure
+stamp-h1
+.deps
+.libs
+*.lo
+*.o
+*.la
+libtool
