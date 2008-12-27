@@ -16,7 +16,7 @@ static uintptr_t mem_size;
 static int in_gc = 0;
 #endif
 
-static sc_val sc_root_stack = NIL;
+static sc_val gc_root_stack = NIL;
 static sc_val gc_root_hooks = NIL;
 
 #define TAG_NUMBER(x)  ((sc_val)((x)<<1 | 0x1))
@@ -369,14 +369,14 @@ void gc_register_roots(sc_val* root0, ...) {
         frame->roots[i++] = va_arg(ap, sc_val*);
     va_end(ap);
 
-    frame->next_frame = sc_root_stack;
+    frame->next_frame = gc_root_stack;
 
-    sc_root_stack = TAG_POINTER(frame);
+    gc_root_stack = TAG_POINTER(frame);
 }
 
 void gc_pop_roots() {
-    assert(!NILP(sc_root_stack));
-    sc_root_stack = UNTAG_PTR(sc_root_stack, gc_external_roots)->next_frame;
+    assert(!NILP(gc_root_stack));
+    gc_root_stack = UNTAG_PTR(gc_root_stack, gc_external_roots)->next_frame;
 }
 
 void gc_register_gc_root_hook(gc_hook *hook) {
@@ -419,7 +419,7 @@ void gc_relocate(sc_val *v) {
 
 void gc_protect_roots() {
     sc_val hook = gc_root_hooks;
-    gc_relocate(&sc_root_stack);
+    gc_relocate(&gc_root_stack);
     while(!NILP(hook)) {
         UNTAG_PTR(sc_car(hook), gc_hook)();
         hook = sc_cdr(hook);
