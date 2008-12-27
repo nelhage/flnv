@@ -1,17 +1,21 @@
-CFLAGS=-g -Wall $(DEFS) $(TEST_CFLAGS)
+CFLAGS=-g -Wall $(DEFS)
 OBJECTS=gc.o symbol.o read.o
 
-TEST_OBJECTS=$(OBJECTS) test.o
-TEST_CFLAGS=-DBUILD_TEST
-TESTER=tester
+TEST_CFLAGS=
+TEST_LIBS=
+TEST_LDFLAGS=
+TEST_OBJECTS=tests.o /usr/lib/libcheck.a
+TESTER=tests
 
-all: $(TESTER)
+all: check
 
-test: $(TESTER)
+check: $(TESTER)
 	./$<
 
-$(TESTER): $(TEST_OBJECTS)
-	gcc -o $@ $(TEST_OBJECTS) $(LDFLAGS)
+$(TEST_OBJECTS): CFLAGS += $(TEST_CFLAGS)
+
+$(TESTER): LDFLAGS += $(TEST_LDFLAGS) $(foreach lib,$(TEST_LIBS), -l$(lib))
+$(TESTER): $(TEST_OBJECTS) $(OBJECTS)
 
 clean:
 	rm -f *.o $(TEST)

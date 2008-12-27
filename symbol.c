@@ -39,32 +39,3 @@ sc_val sc_intern_symbol(char * name) {
     sc_vector_set(obarray, i, v);
     return v;
 }
-
-#ifdef BUILD_TEST
-
-void test_symbol(void) {
-    sc_val r0, r1;
-    char str[2] = "a";
-    int i;
-
-    gc_register_roots(&r0, &r1, NULL);
-
-    r0 = sc_intern_symbol("hello");
-    r1 = sc_intern_symbol("hello");
-
-    assert(!strcmp(sc_symbol_name(r0), "hello"));
-    assert(r0 == r1);
-
-    /* Intern a lot of junk to force an obarray realloc */
-    for(i = 0; i < 26; i++) {
-        str[0] = 'a' + i;
-        sc_intern_symbol(str);
-        str[0] = 'A' + i;
-        sc_intern_symbol(str);
-    }
-
-    assert(!strcmp(sc_symbol_name(r0), "hello"));
-    assert(r0 == r1);
-}
-
-#endif
