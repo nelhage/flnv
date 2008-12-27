@@ -1,5 +1,4 @@
 #include "read.h"
-#include "stack.h"
 #include <string.h>
 #include <assert.h>
 
