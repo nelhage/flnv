@@ -520,6 +520,7 @@ void test_gc(void) {
     t = sc_cdr(reg);
     sc_set_car(t, gc_make_string("Hello, World\n"));
     sc_set_cdr(t, NIL);
+    t = NIL;
 
     assert(sc_numberp(sc_car(reg)));
     assert(sc_number(sc_car(reg)) == 32);
@@ -568,7 +569,7 @@ void test_gc(void) {
     assert(sc_cdr(sc_car(reg)) == reg);
     assert(sc_car(reg) == sc_cdr(reg));
 
-    reg = NIL;
+    t = reg = NIL;
 
     free_mem = gc_free_mem();
     c = gc_count;
