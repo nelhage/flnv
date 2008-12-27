@@ -7,9 +7,9 @@
 /* Constants */
 #define GC_INITIAL_MEM  1024
 
-static uintptr_t * working_mem;
-static uintptr_t * free_mem;
-static uintptr_t * free_ptr;
+static uintptr_t *working_mem = NULL;
+static uintptr_t *free_mem    = NULL;
+static uintptr_t *free_ptr    = NULL;
 static uintptr_t mem_size;
 
 #ifdef TEST_STRESS_GC
@@ -260,12 +260,21 @@ uintptr_t * gc_alloc(uint32_t n) {
 
 /* GC control */
 void gc_init() {
+    if(free_mem) {
+        free(free_mem);
+        free(working_mem);
+    }
     free_mem = malloc(GC_INITIAL_MEM * sizeof(uintptr_t));
-    assert(!(((uintptr_t)free_mem) & 0x3));
     working_mem = malloc(GC_INITIAL_MEM * sizeof(uintptr_t));
+
+    assert(!(((uintptr_t)free_mem) & 0x3));
     assert(!(((uintptr_t)working_mem) & 0x3));
+
     free_ptr = working_mem;
     mem_size = GC_INITIAL_MEM;
+
+    gc_root_hooks = NIL;
+    gc_root_stack = NIL;
 
     gc_register_roots(&gc_root_hooks, NULL);
 }
