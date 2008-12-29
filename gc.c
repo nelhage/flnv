@@ -21,6 +21,9 @@ static int in_gc = 0;
 static gc_handle gc_root_stack = NIL;
 static gc_handle gc_root_hooks = NIL;
 
+static uint32_t gc_n_temp_roots = 0;
+static gc_handle *gc_temp_roots[MAX_EXTERNAL_ROOTS_FRAME];
+
 void *_gc_try_alloc(uint32_t n) {
     if(free_ptr - working_mem + n <= mem_size) {
         void *h = free_ptr;
@@ -133,12 +136,28 @@ void gc_register_roots(gc_handle* root0, ...) {
     /*
      * Because the roots may already be live, we can't perform GC
      * until we've safely registered them. Use _try_alloc to try to
-     * put them in the heap. If that fails, we stash them in a
-     * statically allocated buffer, do the GC, and then stick them in
-     * the heap.
+     * put them in the heap without risking a GC.
      */
     frame = (gc_external_roots*)_gc_try_alloc(3 + nroots);
-    assert(frame); /* XXX FIXME */
+
+    if(!frame) {
+        /*
+         * If there's no room on the heap, we stash them in a
+         * statically allocated buffer, do the GC, and then move them
+         * into the heap.
+         */
+        i = 0;
+        va_start(ap, root0);
+        gc_temp_roots[i++] = root0;
+        while(i < nroots)
+            gc_temp_roots[i++] = va_arg(ap, gc_handle*);
+        va_end(ap);
+        gc_n_temp_roots = nroots;
+        frame = (gc_external_roots*)_gc_alloc(3 + nroots);
+        gc_n_temp_roots = 0;
+    }
+
+    assert(frame);
 
     frame->header.ops = &gc_external_root_ops;
     frame->nroots = nroots;
@@ -216,8 +235,14 @@ void gc_relocate(gc_handle *v) {
 }
 
 void gc_relocate_root() {
+    int i;
     gc_relocate(&gc_root_stack);
     gc_relocate(&gc_root_hooks);
+    if(gc_n_temp_roots) {
+        for(i = 0; i < gc_n_temp_roots; i++) {
+            gc_relocate(gc_temp_roots[i]);
+        }
+    }
 }
 
 void gc_protect_roots() {

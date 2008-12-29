@@ -162,12 +162,13 @@ START_TEST(gc_roots)
 {
     gc_handle reg;
 
-    reg = reg1 = sc_alloc_cons();
-
     gc_register_roots(&reg, NULL);
+
+    reg = reg1 = sc_alloc_cons();
 
     gc_gc();
 
+    fail_unless(sc_consp(reg1));
     fail_unless(reg == reg1);
 
     gc_pop_roots();
@@ -175,6 +176,25 @@ START_TEST(gc_roots)
     gc_gc();
 
     fail_unless(reg != reg1);
+}
+END_TEST
+
+START_TEST(gc_live_roots)
+{
+    gc_handle reg;
+    reg = reg1 = sc_alloc_cons();
+
+    /* Use up all available memory */
+    gc_alloc(NULL, gc_free_mem());
+
+    gc_register_roots(&reg, NULL);
+
+    gc_gc();
+
+    fail_unless(sc_consp(reg1));
+    fail_unless(reg == reg1);
+
+    gc_pop_roots();
 }
 END_TEST
 
@@ -230,6 +250,7 @@ Suite *gc_suite()
     tcase_add_test(tc_core, gc_large_allocs);
     tcase_add_test(tc_core, gc_root_hook);
     tcase_add_test(tc_core, gc_roots);
+    tcase_add_test(tc_core, gc_live_roots);
     suite_add_tcase(s, tc_core);
 
     TCase *tc_obarray = tcase_create("obarray");
