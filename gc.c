@@ -7,6 +7,8 @@
 /* Constants */
 #define GC_INITIAL_MEM  1024
 
+#define BROKEN_HEART    ((gc_ops*)-1)
+
 static uintptr_t *working_mem = NULL;
 static uintptr_t *free_mem    = NULL;
 static uintptr_t *free_ptr    = NULL;
@@ -16,247 +18,51 @@ static uintptr_t mem_size;
 static int in_gc = 0;
 #endif
 
-static sc_val gc_root_stack = NIL;
-static sc_val gc_root_hooks = NIL;
+static gc_handle gc_root_stack = NIL;
+static gc_handle gc_root_hooks = NIL;
 
-#define TAG_NUMBER(x)  ((sc_val)((x)<<1 | 0x1))
-#define TAG_POINTER(x) ((sc_val)(x))
-
-#define NUMBERP(x) ((uintptr_t)(x)&0x1)
-#define POINTERP(x)  (!NUMBERP(x))
-
-#define UNTAG_PTR(c, t) ((t*)c)
-#define UNTAG_NUMBER(c) (((sc_int)(c))>>1)
-
-#define MAX(a,b)                          \
-    ({  typeof (a) _a = (a);              \
-        typeof (b) _b = (b);              \
-        _a > _b ? _a : _b; })
-
-#define STRLEN2CELLS(x) (ROUNDUP(((uint32_t)x),sizeof(sc_val))/sizeof(sc_val))
-
-// Rounding operations (efficient when n is a power of 2)
-// Round down to the nearest multiple of n
-#define ROUNDDOWN(a, n)                                         \
-({                                                              \
-        uint32_t __a = (uint32_t) (a);                          \
-        (typeof(a)) (__a - __a % (n));                          \
-})
-// Round up to the nearest multiple of n
-#define ROUNDUP(a, n)                                           \
-({                                                              \
-        uint32_t __n = (uint32_t) (n);                          \
-        (typeof(a)) (ROUNDDOWN((uint32_t) (a) + __n - 1, __n)); \
-})
-
-enum {
-    TYPE_SYMBOL,
-    TYPE_STRING,
-    TYPE_CONS,
-    TYPE_VECTOR,
-    TYPE_EXTERNAL_ROOTS,
-    TYPE_MAX,
-    TYPE_BROKEN_HEART = (uint8_t)-1
-};
-
-/* Public interfaces */
-
-typedef struct gc_chunk {
-    uint8_t type;
-    uint32_t extra : 24;
-    sc_val  data[0];
-} gc_chunk;
-
-typedef struct gc_cons {
-    gc_chunk header;
-    sc_val   car;
-    sc_val   cdr;
-} gc_cons;
-
-typedef struct gc_symbol {
-    gc_chunk header;
-    char name[];
-} gc_symbol;
-
-typedef struct gc_string {
-    gc_chunk header;
-    char string[];
-} gc_string;
-
-typedef struct gc_vector {
-    gc_chunk header;
-    sc_val   vector[];
-} gc_vector;
-
-typedef struct gc_external_roots {
-    gc_chunk header;
-    sc_val   next_frame;
-    sc_val   *roots[];
-} gc_external_roots;
-
-sc_val sc_car(sc_val c) {
-    assert(sc_consp(c));
-    return UNTAG_PTR(c, gc_cons)->car;
-}
-
-sc_val sc_cdr(sc_val c) {
-    assert(sc_consp(c));
-    return UNTAG_PTR(c, gc_cons)->cdr;
-}
-
-void sc_set_car(sc_val c, sc_val val) {
-    assert(sc_consp(c));
-    UNTAG_PTR(c, gc_cons)->car = val;
-}
-
-void sc_set_cdr(sc_val c, sc_val val) {
-    assert(sc_consp(c));
-    UNTAG_PTR(c, gc_cons)->cdr = val;
-}
-
-char * sc_string(sc_val c) {
-    assert(sc_stringp(c));
-    return UNTAG_PTR(c, gc_string)->string;
-}
-
-char * sc_symbol_name(sc_val c) {
-    assert(sc_symbolp(c));
-    return UNTAG_PTR(c, gc_symbol)->name;
-}
-
-uint32_t sc_strlen(sc_val c) {
-    assert(sc_stringp(c));
-    return UNTAG_PTR(c, gc_string)->header.extra;
-}
-
-sc_int sc_number(sc_val n) {
-    assert(sc_numberp(n));
-    return UNTAG_NUMBER(n);
-}
-
-sc_val sc_make_number(sc_int n) {
-    return (sc_val)TAG_NUMBER(n);
-}
-
-uint32_t sc_vector_len(sc_val v) {
-    assert(sc_vectorp(v));
-    return UNTAG_PTR(v, gc_vector)->header.extra;
-}
-
-sc_val sc_vector_ref(sc_val v, uint32_t n) {
-    assert(sc_vectorp(v));
-    assert(n < sc_vector_len(v));
-    return UNTAG_PTR(v, gc_vector)->vector[n];
-}
-
-void sc_vector_set(sc_val v, uint32_t n, sc_val x) {
-    assert(sc_vectorp(v));
-    assert(n < sc_vector_len(v));
-    UNTAG_PTR(v, gc_vector)->vector[n] = x;
-}
-
-/* Predicates */
-static inline int sc_pointer_typep(sc_val c, uint32_t type) {
-    return POINTERP(c)
-        && !NILP(c)
-        && UNTAG_PTR(c, gc_chunk)->type == type;
-}
-
-int sc_consp(sc_val c) {
-    return sc_pointer_typep(c, TYPE_CONS);
-}
-
-int sc_stringp(sc_val c) {
-    return sc_pointer_typep(c, TYPE_STRING);
-}
-
-int sc_symbolp(sc_val c) {
-    return sc_pointer_typep(c, TYPE_SYMBOL);
-}
-
-int sc_vectorp(sc_val c) {
-    return sc_pointer_typep(c, TYPE_VECTOR);
-}
-
-int sc_numberp(sc_val c) {
-    return NUMBERP(c);
-}
-
-/* Memory allocation */
-
-uintptr_t * gc_alloc(uint32_t n);
-
-sc_val gc_alloc_cons() {
-    gc_cons *cons = (gc_cons*)gc_alloc(3);
-    cons->header.type = TYPE_CONS;
-    cons->car = cons->cdr = NIL;
-    return TAG_POINTER(cons);
-}
-
-sc_val gc_alloc_string(uint32_t len) {
-    gc_string *str = (gc_string*)gc_alloc(STRLEN2CELLS(len) + 1);
-    str->header.type = TYPE_STRING;
-    str->header.extra = len;
-    return TAG_POINTER(str);
-}
-
-sc_val gc_alloc_vector(uint32_t len) {
-    gc_vector *vec = (gc_vector*)gc_alloc(MAX(len,1)+1);
-    vec->header.type = TYPE_VECTOR;
-    vec->header.extra = len;
-    memset(vec->vector, 0, len * sizeof(sc_val));
-    return TAG_POINTER(vec);
-}
-
-sc_val gc_alloc_symbol(uint32_t len) {
-    /* XXX FIXME: This should be refactored better */
-    gc_symbol *sym = UNTAG_PTR(gc_alloc_string(len), gc_symbol);
-    sym->header.type = TYPE_SYMBOL;
-    return TAG_POINTER(sym);
-}
-
-sc_val gc_make_string(char * string) {
-    uint32_t len = strlen(string);
-    sc_val s = gc_alloc_string(len+1);
-    strcpy(sc_string(s), string);
-    return s;
-}
-
-#define MAX_FRAME_SIZE ROUNDUP(sizeof(gc_external_roots) +               \
-                               MAX_EXTERNAL_ROOTS_FRAME*sizeof(sc_val*), \
-                               sizeof(sc_val)) /                         \
-    sizeof(sc_val)
-
-uintptr_t * gc_alloc(uint32_t n) {
-    if(free_ptr - working_mem + n + MAX_FRAME_SIZE <= mem_size) {
-#ifdef TEST_STRESS_GC
-        if(!in_gc) {
-            gc_gc();
-        }
-#endif
-        /* We have enough space in working memory */
-        uintptr_t * p = free_ptr;
+void *_gc_try_alloc(uint32_t n) {
+    if(free_ptr - working_mem + n <= mem_size) {
+        void *h = free_ptr;
         free_ptr += n;
-        return p;
-    } else {
+        return h;
+    }
+    return NIL;
+}
+
+void* _gc_alloc(uint32_t n) {
+    void *handle;
+
+#ifdef TEST_STRESS_GC
+    if(!in_gc) {
+        gc_gc();
+    }
+#endif
+
+    handle = _gc_try_alloc(n);
+    if(!handle) {
         /* Insufficient memory, trigger a GC */
         gc_gc();
-        if(free_ptr - working_mem + n + MAX_FRAME_SIZE <= mem_size) {
-            /* The GC gave us enough space */
-            uintptr_t * p = free_ptr;
-            free_ptr += n;
-            return p;
-        } else {
+        handle = _gc_try_alloc(n);
+        if(!handle) {
             /* This triggers another GC. If we were clever, we would
                use some heuristic to guess when we're running out of
                memory, and could gc_realloc above, instead of GCing first. */
             gc_realloc(n);
-            uintptr_t * p = free_ptr;
-            free_ptr += n;
-            return p;
+            handle = _gc_try_alloc(n);
         }
     }
+    assert(handle);
+    return handle;
 }
+
+void *gc_alloc(gc_ops *ops, uint32_t n) {
+    gc_chunk *handle = _gc_alloc(n);
+    handle->ops = ops;
+    return handle;
+}
+
+void gc_relocate_root(void);
 
 /* GC control */
 void gc_init() {
@@ -276,106 +82,72 @@ void gc_init() {
     gc_root_hooks = NIL;
     gc_root_stack = NIL;
 
-    gc_register_roots(&gc_root_hooks, NULL);
+    gc_register_gc_root_hook(gc_relocate_root);
 }
 
 /* GC internals */
-
-typedef struct gc_ops {
-    void (*op_relocate)(gc_chunk *val);
-    uint32_t (*op_len)(gc_chunk *val);
-} gc_ops;
 
 void gc_relocate_nop(gc_chunk *val UNUSED) {
     /* nop */
 }
 
-void gc_relocate_cons(gc_chunk *v) {
-    gc_cons *cons = (gc_cons*)v;
-    gc_relocate(&cons->car);
-    gc_relocate(&cons->cdr);
-}
+typedef struct gc_external_roots {
+    gc_chunk  header;
+    gc_handle next_frame;
+    uint32_t  nroots;
+    gc_handle *roots[0];
+} gc_external_roots;
 
-void gc_relocate_vector(gc_chunk *v) {
-    uint32_t i;
-    gc_vector *vec = (gc_vector*)v;
-
-    for(i = 0; i < vec->header.extra; i++) {
-        gc_relocate(&vec->vector[i]);
-    }
-}
-
-void gc_relocate_external_roots(gc_chunk *v) {
+static void gc_relocate_external_roots(gc_external_roots *v) {
     uint32_t i;
     gc_external_roots *r = (gc_external_roots*)v;
 
     gc_relocate(&r->next_frame);
 
-    for(i = 0; i < r->header.extra; i++) {
+    for(i = 0; i < r->nroots; i++) {
         gc_relocate(r->roots[i]);
     }
 }
 
-uint32_t gc_len_string(gc_chunk *v) {
-    return STRLEN2CELLS(v->extra);
+static uint32_t gc_len_external_roots(gc_external_roots *v) {
+    return v->nroots + 2;
 }
 
-uint32_t gc_len_cons(gc_chunk *v UNUSED) {
-    return 2;
-}
-
-uint32_t gc_len_vector(gc_chunk *v) {
-    return MAX((uint32_t)v->extra, 1);
-}
-
-uint32_t gc_len_external_roots(gc_chunk *v) {
-    return v->extra + 1;
-}
-
-gc_ops gc_op_table[TYPE_MAX] = {
-    [TYPE_SYMBOL] {gc_relocate_nop, gc_len_string},
-    [TYPE_STRING] {gc_relocate_nop, gc_len_string},
-    [TYPE_CONS]   {gc_relocate_cons, gc_len_cons},
-    [TYPE_VECTOR] {gc_relocate_vector, gc_len_vector},
-    [TYPE_EXTERNAL_ROOTS] {gc_relocate_external_roots, gc_len_external_roots}
+static gc_ops gc_external_root_ops = {
+    .op_relocate = (gc_relocate_op)gc_relocate_external_roots,
+    .op_len = (gc_len_op) gc_len_external_roots
 };
 
-void gc_register_roots(sc_val* root0, ...) {
+void gc_register_roots(gc_handle* root0, ...) {
     int nroots = 1;
     va_list ap;
     gc_external_roots *frame;
-    int i = 0;
+    int i;
 
     va_start(ap, root0);
-    while(va_arg(ap, sc_val*)) nroots++;
+    while(va_arg(ap, gc_handle*)) nroots++;
     va_end(ap);
 
     assert(nroots <= MAX_EXTERNAL_ROOTS_FRAME);
 
     /*
      * Because the roots may already be live, we can't perform GC
-     * until we've safely registered them. gc_alloc will ensure we
-     * always have space to allocate new roots, and we set in_gc to
-     * true to force gc_alloc not to do a gc_gc() even if we're in
-     * stress-testing mode.
+     * until we've safely registered them. Use _try_alloc to try to
+     * put them in the heap. If that fails, we stash them in a
+     * statically allocated buffer, do the GC, and then stick them in
+     * the heap.
      */
-    assert(gc_free_mem() >= sizeof *frame + nroots * sizeof(sc_val*));
-#ifdef TEST_STRESS_GC
-    in_gc = 1;
-#endif
-    frame = (gc_external_roots*)gc_alloc(sizeof *frame +
-                                         nroots * sizeof(sc_val*));
-#ifdef TEST_STRESS_GC
-    in_gc = 0;
-#endif
+    frame = (gc_external_roots*)_gc_try_alloc(3 + nroots);
+    assert(frame); /* XXX FIXME */
 
-    frame->header.type = TYPE_EXTERNAL_ROOTS;
-    frame->header.extra = nroots;
+    frame->header.ops = &gc_external_root_ops;
+    frame->nroots = nroots;
 
+    i = 0;
     va_start(ap, root0);
     frame->roots[i++] = root0;
     while(--nroots)
-        frame->roots[i++] = va_arg(ap, sc_val*);
+        frame->roots[i++] = va_arg(ap, gc_handle*);
     va_end(ap);
 
     frame->next_frame = gc_root_stack;
@@ -388,17 +160,35 @@ void gc_pop_roots() {
     gc_root_stack = UNTAG_PTR(gc_root_stack, gc_external_roots)->next_frame;
 }
 
-void gc_register_gc_root_hook(gc_hook *hook) {
-    sc_val pair = gc_alloc_cons();
-    sc_set_cdr(pair, gc_root_hooks);
-    sc_set_car(pair, TAG_POINTER(hook));
-    gc_root_hooks = pair;
+typedef struct gc_root_hook {
+    gc_chunk  header;
+    gc_handle next;
+    gc_hook   *hook;
+} gc_root_hook;
+
+static void gc_relocate_root_hook(gc_root_hook *hook) {
+    gc_relocate(&hook->next);
 }
 
-void gc_relocate(sc_val *v) {
+static uint32_t gc_len_root_hook(gc_chunk *chunk) {
+    return 2;
+}
+
+static struct gc_ops gc_root_hook_ops = {
+    .op_relocate = (gc_relocate_op)gc_relocate_root_hook,
+    .op_len      = (gc_len_op)gc_len_root_hook
+};
+
+void gc_register_gc_root_hook(gc_hook *hook_fun) {
+    gc_root_hook *hook = (gc_root_hook*)gc_alloc(&gc_root_hook_ops, 3);
+    hook->next = TAG_POINTER(gc_root_hooks);
+    hook->hook = hook_fun;
+    gc_root_hooks = TAG_POINTER(hook);
+}
+
+void gc_relocate(gc_handle *v) {
     int len;
     uintptr_t *reloc;
-    int type;
     gc_chunk *val;
 
     if(NUMBERP(*v))
@@ -409,29 +199,34 @@ void gc_relocate(sc_val *v) {
        || (uintptr_t*)val >= (free_mem + mem_size)) {
         return;
     }
-    type = val->type;
 
-    if(TYPE_BROKEN_HEART == type) {
+    if(val->ops == BROKEN_HEART) {
         *v = val->data[0];
         return;
     }
 
-    assert(type < TYPE_MAX);
+    assert(val->ops);
 
-    len = gc_op_table[type].op_len(val) + 1;
+    len = val->ops->op_len(val) + 1;
 
-    reloc = gc_alloc(len);
+    reloc = _gc_alloc(len);
     memcpy(reloc, val, sizeof(uintptr_t) * len);
-    val->type = TYPE_BROKEN_HEART;
+    val->ops = BROKEN_HEART;
     *v = val->data[0] = reloc;
 }
 
-void gc_protect_roots() {
-    sc_val hook = gc_root_hooks;
+void gc_relocate_root() {
     gc_relocate(&gc_root_stack);
-    while(!NILP(hook)) {
-        UNTAG_PTR(sc_car(hook), gc_hook)();
-        hook = sc_cdr(hook);
+    gc_relocate(&gc_root_hooks);
+}
+
+void gc_protect_roots() {
+    gc_root_hook *hook = UNTAG_PTR(gc_root_hooks, gc_root_hook);
+
+    while(hook) {
+        assert(hook->header.ops == &gc_root_hook_ops);
+        hook->hook();
+        hook = UNTAG_PTR(hook->next, gc_root_hook);
     }
 }
 
@@ -460,10 +255,10 @@ void gc_gc() {
     while(scan != free_ptr) {
         gc_chunk *chunk = (gc_chunk*)scan;
 
-        assert(chunk->type < TYPE_MAX);
+        assert(chunk->ops);
 
-        gc_op_table[chunk->type].op_relocate(chunk);
-        scan += gc_op_table[chunk->type].op_len(chunk) + 1;
+        chunk->ops->op_relocate(chunk);
+        scan += chunk->ops->op_len(chunk) + 1;
 
         if(scan > working_mem + mem_size) {
             printf("GC internal error -- ran off the end of memory!\n");
@@ -475,9 +270,11 @@ void gc_gc() {
     in_gc = 0;
 #endif
 
+#ifndef NDEBUG
     /* Zero the old free memory to help catch code that accidentally
-       holds onto sc_val's during GC.*/
+       holds onto gc_handle's during GC.*/
     memset(free_mem, 0, sizeof(uintptr_t) * mem_size);
+#endif
     printf("Done (freed %d words)\n", gc_free_mem() - old_avail);
 }
 

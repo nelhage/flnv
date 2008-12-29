@@ -4,6 +4,6 @@
 #include "gc.h"
 
 void obarray_init();
-sc_val sc_intern_symbol(char * name);
+gc_handle sc_intern_symbol(char * name);
 
 #endif /* !defined(__MINISCHEME_SYMBOL__) */

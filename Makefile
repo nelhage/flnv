@@ -1,6 +1,6 @@
 CC=gcc
 CFLAGS=-g -Wall $(DEFS)
-OBJECTS=gc.o symbol.o read.o
+OBJECTS=gc.o scgc.o symbol.o
 
 TEST_CFLAGS=$(shell pkg-config check --cflags)
 TEST_LIBS=$(shell pkg-config check --libs)

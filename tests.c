@@ -1,9 +1,11 @@
 #include <check.h>
+#include <string.h>
+
 #include "gc.h"
-#include "string.h"
+#include "scgc.h"
 #include "symbol.h"
 
-sc_val reg1, reg2;
+gc_handle reg1, reg2;
 
 static void gc_core_setup(void) {
     gc_init();
@@ -16,11 +18,11 @@ static void gc_core_teardown(void) {
 
 START_TEST(gc_sanity_check)
 {
-    reg1 = gc_alloc_cons();
+    reg1 = sc_alloc_cons();
     sc_set_car(reg1, sc_make_number(32));
-    sc_set_cdr(reg1, gc_alloc_cons());
+    sc_set_cdr(reg1, sc_alloc_cons());
     reg2 = sc_cdr(reg1);
-    sc_set_car(reg2, gc_make_string("Hello, World\n"));
+    sc_set_car(reg2, sc_make_string("Hello, World\n"));
     sc_set_cdr(reg2, NIL);
     reg2 = NIL;
 
@@ -28,18 +30,18 @@ START_TEST(gc_sanity_check)
     fail_unless(sc_number(sc_car(reg1)) == 32);
     fail_unless(sc_consp(sc_cdr(reg1)));
     fail_unless(sc_stringp(sc_car(sc_cdr(reg1))));
-    fail_unless(!strcmp(sc_string(sc_car(sc_cdr(reg1))),"Hello, World\n"));
+    fail_unless(!strcmp(sc_string_get(sc_car(sc_cdr(reg1))),"Hello, World\n"));
     fail_unless(NILP(sc_cdr(sc_cdr(reg1))));
 }
 END_TEST
 
 START_TEST(objs_survive_gc)
 {
-    reg1 = gc_alloc_cons();
+    reg1 = sc_alloc_cons();
     sc_set_car(reg1, sc_make_number(32));
-    sc_set_cdr(reg1, gc_alloc_cons());
+    sc_set_cdr(reg1, sc_alloc_cons());
     reg2 = sc_cdr(reg1);
-    sc_set_car(reg2, gc_make_string("Hello, World\n"));
+    sc_set_car(reg2, sc_make_string("Hello, World\n"));
     sc_set_cdr(reg2, NIL);
     reg2 = NIL;
 
@@ -49,7 +51,7 @@ START_TEST(objs_survive_gc)
     fail_unless(sc_number(sc_car(reg1)) == 32);
     fail_unless(sc_consp(sc_cdr(reg1)));
     fail_unless(sc_stringp(sc_car(sc_cdr(reg1))));
-    fail_unless(!strcmp(sc_string(sc_car(sc_cdr(reg1))),"Hello, World\n"));
+    fail_unless(!strcmp(sc_string_get(sc_car(sc_cdr(reg1))),"Hello, World\n"));
     fail_unless(NILP(sc_cdr(sc_cdr(reg1))));
 }
 END_TEST
@@ -60,7 +62,7 @@ START_TEST(gc_frees_mem)
     uint32_t free_mem;
     int i;
     for(i=0; i < 10; i++) {
-        fail_unless((intptr_t)gc_alloc_cons());
+        fail_unless((intptr_t)sc_alloc_cons());
     }
     free_mem = gc_free_mem();
     gc_gc();
@@ -72,12 +74,18 @@ END_TEST
 START_TEST(gc_cons_cycle)
 {
     uint32_t free_mem;
-    reg1 = gc_alloc_cons();
-    reg2 = gc_alloc_cons();
+    reg1 = sc_alloc_cons();
+    reg2 = sc_alloc_cons();
     sc_set_car(reg1, reg1);
     sc_set_cdr(reg1, reg2);
     sc_set_car(reg2, reg1);
     sc_set_cdr(reg2, reg1);
+
+    fail_unless(sc_car(sc_car(reg2)) == sc_car(reg2));
+    fail_unless(sc_cdr(sc_car(reg2)) == reg2);
+    fail_unless(sc_car(reg2) == sc_cdr(reg2));
+
+    gc_gc();
 
     fail_unless(sc_car(sc_car(reg2)) == sc_car(reg2));
     fail_unless(sc_cdr(sc_car(reg2)) == reg2);
@@ -102,9 +110,9 @@ END_TEST
 START_TEST(gc_basic_vector)
 {
     int i;
-    reg1 = gc_alloc_vector(10);
+    reg1 = sc_alloc_vector(10);
     for(i = 0; i < 10; i++) {
-        sc_vector_set(reg1, i, gc_alloc_cons());
+        sc_vector_set(reg1, i, sc_alloc_cons());
         sc_set_car(sc_vector_ref(reg1, i), sc_make_number(i));
     }
     gc_gc();
@@ -119,10 +127,10 @@ START_TEST(gc_large_allocs)
 {
     int i;
     for(i=0;i<2000;i++) {
-        gc_alloc_cons();
+        sc_alloc_cons();
     }
-    gc_alloc_vector(0x2000);
-    reg1 = gc_alloc_cons();
+    sc_alloc_vector(0x2000);
+    reg1 = sc_alloc_cons();
 
     gc_gc();
 
@@ -130,7 +138,7 @@ START_TEST(gc_large_allocs)
 }
 END_TEST
 
-sc_val external_root;
+gc_handle external_root;
 void gc_reloc_external() {
     gc_relocate(&external_root);
 }
@@ -138,7 +146,7 @@ void gc_reloc_external() {
 START_TEST(gc_root_hook)
 {
     gc_register_gc_root_hook(gc_reloc_external);
-    external_root = gc_alloc_cons();
+    external_root = sc_alloc_cons();
     sc_set_car(external_root, external_root);
     sc_set_cdr(external_root, NIL);
 
@@ -152,9 +160,9 @@ END_TEST
 
 START_TEST(gc_roots)
 {
-    sc_val reg;
+    gc_handle reg;
 
-    reg = reg1 = gc_alloc_cons();
+    reg = reg1 = sc_alloc_cons();
 
     gc_register_roots(&reg, NULL);
 
@@ -244,7 +252,7 @@ int main()
     int failed;
     Suite *s = gc_suite();
     SRunner *sr = srunner_create(s);
-    srunner_run_all(sr, CK_NORMAL);
+    srunner_run_all(sr, CK_ENV);
     failed = srunner_ntests_failed(sr);
     srunner_free(sr);
 

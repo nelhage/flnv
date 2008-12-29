@@ -7,59 +7,75 @@
 
 #define UNUSED __attribute__((unused))
 
-typedef intptr_t sc_int;
-typedef uintptr_t* sc_val;
+struct gc_ops;
+struct gc_chunk;
 
-/* Accesors */
+typedef intptr_t gc_int;
+typedef struct gc_chunk* gc_handle;
 
-sc_val sc_car(sc_val c);
-sc_val sc_cdr(sc_val c);
-void sc_set_car(sc_val c, sc_val val);
-void sc_set_cdr(sc_val c, sc_val val);
+typedef struct gc_chunk {
+    struct gc_ops * ops;
+    void *data[0];
+} gc_chunk;
 
-char * sc_string(sc_val s);
-uint32_t sc_strlen(sc_val s);
+typedef void (*gc_relocate_op)(gc_chunk*);
+typedef uint32_t (*gc_len_op)(gc_chunk*);
 
-char* sc_symbol_name(sc_val s);
+typedef struct gc_ops {
+    gc_relocate_op op_relocate;
+    gc_len_op op_len;
+} gc_ops;
 
-sc_int sc_number(sc_val n);
+typedef void gc_hook(void);
 
-uint32_t sc_vector_len(sc_val v);
-sc_val sc_vector_ref(sc_val v, uint32_t n);
-void sc_vector_set(sc_val v, uint32_t n, sc_val x);
-
-/* Predicates */
-int sc_consp(sc_val c);
-int sc_stringp(sc_val c);
-int sc_numberp(sc_val c);
-int sc_symbolp(sc_val c);
-int sc_vectorp(sc_val c);
-
-/* Memory allocaton */
-sc_val gc_alloc_cons();
-sc_val gc_alloc_string(uint32_t len);
-sc_val gc_alloc_vector(uint32_t len);
-sc_val gc_alloc_symbol(uint32_t len);
-
-sc_val gc_make_string(char * s);
-sc_val sc_make_number(sc_int n);
+void gc_relocate_nop(gc_chunk *);
+void gc_relocate(gc_handle *v);
 
 /* GC control */
 void gc_init();
-void gc_gc();
+
+void *gc_alloc(gc_ops *ops, uint32_t len);
+
 void gc_realloc(uint32_t need_mem);
+void gc_gc();
 uint32_t gc_free_mem();
 
 #define MAX_EXTERNAL_ROOTS_FRAME        10
-void gc_register_roots(sc_val *root0, ...);
+void gc_register_roots(gc_handle *root0, ...);
 void gc_pop_roots();
 
-typedef void gc_hook(void);
 void gc_register_gc_root_hook(gc_hook *);
 
-void gc_relocate(sc_val *v);
+/* Here be demons */
+#define TAG_NUMBER(x)  ((gc_handle)((x)<<1 | 0x1))
+#define TAG_POINTER(x) ((gc_handle)(x))
 
-#define NIL          ((sc_val)0)
-#define NILP(x)      (!(x))
+#define NUMBERP(x) ((uintptr_t)(x)&0x1)
+#define POINTERP(x)  (!NUMBERP(x))
+
+#define UNTAG_PTR(c, t) ((t*)c)
+#define UNTAG_NUMBER(c) (((gc_int)(c))>>1)
+
+#define MAX(a,b)                          \
+    ({  typeof (a) _a = (a);              \
+        typeof (b) _b = (b);              \
+        _a > _b ? _a : _b; })
+
+// Rounding operations (efficient when n is a power of 2)
+// Round down to the nearest multiple of n
+#define ROUNDDOWN(a, n)                                         \
+({                                                              \
+        uint32_t __a = (uint32_t) (a);                          \
+        (typeof(a)) (__a - __a % (n));                          \
+})
+// Round up to the nearest multiple of n
+#define ROUNDUP(a, n)                                           \
+({                                                              \
+        uint32_t __n = (uint32_t) (n);                          \
+        (typeof(a)) (ROUNDDOWN((uint32_t) (a) + __n - 1, __n)); \
+})
+
+#define NIL          (TAG_POINTER(NULL))
+#define NILP(x)      ((x) == NIL)
 
 #endif /* !defined(__MINISCHEME_GC__)*/
