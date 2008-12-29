@@ -1,22 +1,69 @@
--*- mode: outline -*-
+-*- mode: org -*-
 
 * SICP's compiler
- * Stack
- * 7 registers
-  * exp
-   * Expression being evaluated
-  * env
-   * Evaluation environment
-  * val
-   * Return value
-  * continue
-   * Return address
-  * proc
-  * arg1
-  * unev
+** Stack
+** 7 registers
+*** exp
+**** Expression being evaluated
+*** env
+**** Evaluation environment
+*** val
+**** Return value
+*** continue
+**** Return address
+*** proc
+*** arg1
+*** unev
 
 * Types
- * cons
- * string
- * number
- * symbol
+** cons
+** string
+** number
+** symbol
+
+* opcodes
+** Data
+*** Arithmetic
+**** ADD %r1, %r2, %rout
+**** SUB %r1, %r2, %rout
+**** MUL %r1, %r2, %rout
+**** DIV $r1, %r2, %rout
+*** Cons cells
+**** CONS %rcar, %rcdr, %rout
+**** CAR  %rcons, %rout
+**** CDR  %rcons, %rout
+**** SET-CAR %rcons, %rcar
+**** SET-CDR %rcons, %rcdr
+*** Vectors
+**** MAKE-VECTOR %rlen, %rout
+**** VECTOR-REF  %rv, %ri
+**** VECTOR-SET  %rv, %ri, %rval
+*** Environments
+**** EXTEND-ENV $n, %renv
+**** ENV-PARENT %renv, %rout
+**** ENV-REF    $i, %renv, %rout
+**** ENV-SET    $i, %rval, %renv
+*** Predicates
+**** CONS?      %rit, %rout
+**** NUMBER?    %rit, %rout
+**** VECTOR?    %rit, %rout
+**** NULL?      %rit, %rout
+**** TRUE?      %rit, %rout
+*** Comparisons
+**** EQ?        %r1, %r2, %rout
+**** =          %r1, %r2, %rout
+**** <          %r1, %r2, %rout
+**** >          %r1, %r2, %rout
+**** <=         %r1, %r2, %rout
+**** >=         %r1, %r2, %rout
+** VM
+*** LOAD-INT    $n, %r
+*** LOAD-NULL   %r
+*** MOV         %r1, %r2
+*** BRANCH      $reladdr
+*** JMP         %reg
+*** JT          %reg, $reladdr
+*** CALL        $reladdr
+** Stack
+*** PUSH        %reg
+*** POP         %reg
