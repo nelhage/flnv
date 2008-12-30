@@ -111,11 +111,15 @@ START_TEST(gc_basic_vector)
 {
     int i;
     reg1 = sc_alloc_vector(10);
+    fail_unless(sc_vectorp(reg1));
+
     for(i = 0; i < 10; i++) {
         sc_vector_set(reg1, i, sc_alloc_cons());
         sc_set_car(sc_vector_ref(reg1, i), sc_make_number(i));
     }
     gc_gc();
+
+    fail_unless(sc_vectorp(reg1));
     for(i = 0; i < 10; i++) {
         fail_unless(sc_consp(sc_vector_ref(reg1, i)));
         fail_unless(sc_number(sc_car(sc_vector_ref(reg1, i))) == i);
@@ -135,6 +139,28 @@ START_TEST(gc_large_allocs)
     gc_gc();
 
     fail_unless(sc_consp(reg1));
+}
+END_TEST
+
+START_TEST(gc_many_allocs)
+{
+    int i;
+    reg2 = reg1 = sc_alloc_cons();
+    for(i = 0; i < 2000; i++) {
+        sc_set_car(reg2, sc_make_number(i));
+        sc_set_cdr(reg2, sc_alloc_cons());
+        reg2 = sc_cdr(reg2);
+    }
+
+    gc_gc();
+
+    reg2 = reg1;
+    for(i = 0; i < 2000; i++) {
+        fail_unless(sc_consp(reg2));
+        fail_unless(sc_numberp(sc_car(reg2)));
+        fail_unless(sc_number(sc_car(reg2)) == i);
+        reg2 = sc_cdr(reg2);
+    }
 }
 END_TEST
 
@@ -248,6 +274,7 @@ Suite *gc_suite()
     tcase_add_test(tc_core, gc_cons_cycle);
     tcase_add_test(tc_core, gc_basic_vector);
     tcase_add_test(tc_core, gc_large_allocs);
+    tcase_add_test(tc_core, gc_many_allocs);
     tcase_add_test(tc_core, gc_root_hook);
     tcase_add_test(tc_core, gc_roots);
     tcase_add_test(tc_core, gc_live_roots);
