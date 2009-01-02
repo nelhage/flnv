@@ -46,15 +46,34 @@ void gc_pop_roots();
 
 void gc_register_gc_root_hook(gc_hook *);
 
+#define TAG_BITS     2
+#define TAG_MASK     0x03
+#define NUMBER_TAG   0x01
+#define POINTER_TAG  0x02
+
 /* Here be demons */
-#define TAG_NUMBER(x)  ((gc_handle)((x)<<1 | 0x1))
-#define TAG_POINTER(x) ((gc_handle)(x))
+static inline gc_handle gc_tag_number(gc_int n) {
+    return (n << TAG_BITS) | NUMBER_TAG;
+}
 
-#define NUMBERP(x) ((uintptr_t)(x)&0x1)
-#define POINTERP(x)  (!NUMBERP(x))
+static inline gc_handle gc_tag_pointer(void *p) {
+    assert(!(((gc_int)p) & TAG_MASK));
+    return (gc_handle)((gc_int)p) | POINTER_TAG;
+}
 
-#define UNTAG_PTR(c, t) ((t*)c)
-#define UNTAG_NUMBER(c) (((gc_int)(c))>>1)
+static inline int gc_numberp(gc_handle h) {
+    return (h & TAG_MASK) == NUMBER_TAG;
+}
+
+static inline int gc_pointerp(gc_handle h) {
+    return (h & TAG_MASK) == POINTER_TAG;
+}
+
+static inline gc_int gc_untag_number(gc_handle h) {
+    return (h >> TAG_BITS);
+}
+
+#define UNTAG_PTR(c, t) ((t*)(c & ~TAG_MASK))
 
 #define MAX(a,b)                          \
     ({  typeof (a) _a = (a);              \
@@ -75,7 +94,7 @@ void gc_register_gc_root_hook(gc_hook *);
         (typeof(a)) (ROUNDDOWN((uint32_t) (a) + __n - 1, __n)); \
 })
 
-#define NIL          (TAG_POINTER(NULL))
+#define NIL          (gc_tag_pointer(NULL))
 #define NILP(x)      ((x) == NIL)
 
 #endif /* !defined(__MINISCHEME_GC__)*/

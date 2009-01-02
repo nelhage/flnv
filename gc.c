@@ -18,8 +18,8 @@ static uintptr_t mem_size;
 static int in_gc = 0;
 #endif
 
-static gc_handle gc_root_stack = NIL;
-static gc_handle gc_root_hooks = NIL;
+static gc_handle gc_root_stack;
+static gc_handle gc_root_hooks;
 
 static uint32_t gc_n_temp_roots = 0;
 static gc_handle *gc_temp_roots[MAX_EXTERNAL_ROOTS_FRAME];
@@ -30,7 +30,7 @@ void *_gc_try_alloc(uint32_t n) {
         free_ptr += n;
         return h;
     }
-    return NIL;
+    return NULL;
 }
 
 void* _gc_alloc(uint32_t n) {
@@ -84,6 +84,7 @@ void gc_init() {
 
     gc_root_hooks = NIL;
     gc_root_stack = NIL;
+    gc_n_temp_roots = 0;
 
     gc_register_gc_root_hook(gc_relocate_root);
 }
@@ -171,7 +172,7 @@ void gc_register_roots(gc_handle* root0, ...) {
 
     frame->next_frame = gc_root_stack;
 
-    gc_root_stack = TAG_POINTER(frame);
+    gc_root_stack = gc_tag_pointer(frame);
 }
 
 void gc_pop_roots() {
@@ -200,9 +201,9 @@ static struct gc_ops gc_root_hook_ops = {
 
 void gc_register_gc_root_hook(gc_hook *hook_fun) {
     gc_root_hook *hook = (gc_root_hook*)gc_alloc(&gc_root_hook_ops, 3);
-    hook->next = TAG_POINTER(gc_root_hooks);
+    hook->next = gc_root_hooks;
     hook->hook = hook_fun;
-    gc_root_hooks = TAG_POINTER(hook);
+    gc_root_hooks = gc_tag_pointer(hook);
 }
 
 void gc_relocate(gc_handle *v) {
@@ -210,7 +211,7 @@ void gc_relocate(gc_handle *v) {
     uintptr_t *reloc;
     gc_chunk *val;
 
-    if(NUMBERP(*v))
+    if(gc_numberp(*v))
         return;
     val = UNTAG_PTR(*v, gc_chunk);
 
@@ -231,7 +232,7 @@ void gc_relocate(gc_handle *v) {
     reloc = _gc_alloc(len);
     memcpy(reloc, val, sizeof(uintptr_t) * len);
     val->ops = BROKEN_HEART;
-    *v = val->data[0] = TAG_POINTER(reloc);
+    *v = val->data[0] = gc_tag_pointer(reloc);
 }
 
 void gc_relocate_root() {

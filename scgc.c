@@ -114,11 +114,11 @@ uint32_t sc_strlen(gc_handle c) {
 
 gc_int sc_number(gc_handle n) {
     assert(sc_numberp(n));
-    return UNTAG_NUMBER(n);
+    return gc_untag_number(n);
 }
 
 gc_handle sc_make_number(gc_int n) {
-    return (gc_handle)TAG_NUMBER(n);
+    return gc_tag_number(n);
 }
 
 uint32_t sc_vector_len(gc_handle v) {
@@ -140,7 +140,7 @@ void sc_vector_set(gc_handle v, uint32_t n, gc_handle x) {
 
 /* Predicates */
 static inline int sc_pointer_typep(gc_handle c, gc_ops *type) {
-    return POINTERP(c)
+    return gc_pointerp(c)
         && !NILP(c)
         && UNTAG_PTR(c, gc_chunk)->ops == type;
 }
@@ -162,7 +162,7 @@ int sc_vectorp(gc_handle c) {
 }
 
 int sc_numberp(gc_handle c) {
-    return NUMBERP(c);
+    return gc_numberp(c);
 }
 
 /* Memory allocation */
@@ -170,13 +170,13 @@ int sc_numberp(gc_handle c) {
 gc_handle sc_alloc_cons() {
     sc_cons *cons = (sc_cons*)gc_alloc(&sc_cons_ops, 3);
     cons->car = cons->cdr = NIL;
-    return TAG_POINTER(cons);
+    return gc_tag_pointer(cons);
 }
 
 gc_handle sc_alloc_string(uint32_t len) {
     sc_string *str = (sc_string*)gc_alloc(&sc_string_ops, STRLEN2CELLS(len) + 2);
     str->strlen = len;
-    return TAG_POINTER(str);
+    return gc_tag_pointer(str);
 }
 
 gc_handle sc_alloc_vector(uint32_t len) {
@@ -186,13 +186,13 @@ gc_handle sc_alloc_vector(uint32_t len) {
     for(i = 0; i < len; i++) {
         vec->vector[i] = NIL;
     }
-    return TAG_POINTER(vec);
+    return gc_tag_pointer(vec);
 }
 
 gc_handle sc_alloc_symbol(uint32_t len) {
     sc_symbol *sym = (sc_string*)gc_alloc(&sc_symbol_ops, STRLEN2CELLS(len) + 2);
     sym->strlen = len;
-    return TAG_POINTER(sym);
+    return gc_tag_pointer(sym);
 }
 
 gc_handle sc_make_string(char *string) {
