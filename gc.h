@@ -11,11 +11,11 @@ struct gc_ops;
 struct gc_chunk;
 
 typedef intptr_t gc_int;
-typedef struct gc_chunk* gc_handle;
+typedef uint32_t gc_handle;
 
 typedef struct gc_chunk {
     struct gc_ops * ops;
-    void *data[0];
+    gc_handle data[0];
 } gc_chunk;
 
 typedef void (*gc_relocate_op)(gc_chunk*);

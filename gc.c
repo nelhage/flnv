@@ -231,7 +231,7 @@ void gc_relocate(gc_handle *v) {
     reloc = _gc_alloc(len);
     memcpy(reloc, val, sizeof(uintptr_t) * len);
     val->ops = BROKEN_HEART;
-    *v = val->data[0] = reloc;
+    *v = val->data[0] = TAG_POINTER(reloc);
 }
 
 void gc_relocate_root() {
