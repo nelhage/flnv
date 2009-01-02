@@ -8,6 +8,8 @@ TEST_LDFLAGS=
 TEST_OBJECTS=tests.o
 TESTER=tests
 
+SOURCES=$(OBJECTS:.o=.c) $(TEST_OBJECTS:.o=.c)
+
 all: check
 
 check: $(TESTER)
@@ -24,3 +26,11 @@ clean:
 
 check-syntax:
 	$(CC) $(CCFLAGS) -Wall -Wextra -fsyntax-only $(CHK_SOURCES)
+
+%.d: %.c
+	@set -e; rm -f $@; \
+	$(CC) -M $(CPPFLAGS) $< > $@.$$$$; \
+	sed 's,\($*\)\.o[ :]*,\1.o $@ : ,g' < $@.$$$$ > $@; \
+	rm -f $@.$$$$
+
+-include $(SOURCES:.c=.d)
