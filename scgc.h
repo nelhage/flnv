@@ -35,5 +35,11 @@ int sc_stringp(gc_handle c);
 int sc_numberp(gc_handle c);
 int sc_symbolp(gc_handle c);
 int sc_vectorp(gc_handle c);
+int sc_booleanp(gc_handle c);
+
+extern gc_handle sc_true;
+extern gc_handle sc_false;
+
+void sc_init();
 
 #endif

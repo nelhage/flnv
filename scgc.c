@@ -4,6 +4,8 @@
 
 #define STRLEN2CELLS(x) (ROUNDUP(((uint32_t)(x)),sizeof(gc_handle))/sizeof(gc_handle))
 
+gc_handle sc_true, sc_false;
+
 /* Types */
 typedef struct sc_cons {
     gc_chunk header;
@@ -25,6 +27,11 @@ typedef struct sc_vector {
     gc_handle vector[];
 } sc_vector;
 
+typedef struct sc_boolean {
+    gc_chunk header;
+    int      val;
+} sc_boolean;
+
 /* Op functions */
 
 uint32_t sc_len_string(gc_chunk *v) {
@@ -37,6 +44,10 @@ uint32_t sc_len_cons(gc_chunk *v UNUSED) {
 
 uint32_t sc_len_vector(gc_chunk *v) {
     return 1 + ((sc_vector*)v)->veclen;
+}
+
+uint32_t sc_len_boolean(gc_chunk *v UNUSED) {
+    return 1;
 }
 
 void sc_relocate_cons(gc_chunk *v) {
@@ -73,6 +84,11 @@ static struct gc_ops sc_cons_ops = {
 static struct gc_ops sc_vector_ops = {
     .op_relocate = sc_relocate_vector,
     .op_len      = sc_len_vector
+};
+
+static struct gc_ops sc_boolean_ops = {
+    .op_relocate = gc_relocate_nop,
+    .op_len      = sc_len_boolean
 };
 
 /* Public API */
@@ -161,6 +177,10 @@ int sc_vectorp(gc_handle c) {
     return sc_pointer_typep(c, &sc_vector_ops);
 }
 
+int sc_booleanp(gc_handle c) {
+    return sc_pointer_typep(c, &sc_boolean_ops);
+}
+
 int sc_numberp(gc_handle c) {
     return gc_numberp(c);
 }
@@ -200,4 +220,11 @@ gc_handle sc_make_string(char *string) {
     gc_handle s = sc_alloc_string(len+1);
     strcpy(sc_string_get(s), string);
     return s;
+}
+
+void sc_init() {
+    sc_true = gc_tag_pointer(gc_alloc(&sc_boolean_ops, 2));
+    UNTAG_PTR(sc_true, sc_boolean)->val = 1;
+    sc_false = gc_tag_pointer(gc_alloc(&sc_boolean_ops, 2));
+    UNTAG_PTR(sc_false, sc_boolean)->val = 0;
 }

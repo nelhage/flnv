@@ -9,6 +9,7 @@ gc_handle reg1, reg2;
 
 static void gc_core_setup(void) {
     gc_init();
+    sc_init();
     reg1 = reg2 = NIL;
     gc_register_roots(&reg1, &reg2, NULL);
 }
@@ -33,6 +34,14 @@ START_TEST(gc_sanity_check)
     fail_unless(sc_stringp(sc_car(sc_cdr(reg1))));
     fail_unless(!strcmp(sc_string_get(sc_car(sc_cdr(reg1))),"Hello, World\n"));
     fail_unless(NILP(sc_cdr(sc_cdr(reg1))));
+}
+END_TEST
+
+START_TEST(gc_booleans)
+{
+    fail_unless(sc_booleanp(sc_true));
+    fail_unless(sc_booleanp(sc_false));
+    fail_unless(sc_true != sc_false);
 }
 END_TEST
 
@@ -270,6 +279,7 @@ Suite *gc_suite()
                               gc_core_setup,
                               gc_core_teardown);
     tcase_add_test(tc_core, gc_sanity_check);
+    tcase_add_test(tc_core, gc_booleans);
     tcase_add_test(tc_core, objs_survive_gc);
     tcase_add_test(tc_core, gc_frees_mem);
     tcase_add_test(tc_core, gc_cons_cycle);
