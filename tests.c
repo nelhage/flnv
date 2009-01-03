@@ -234,6 +234,29 @@ START_TEST(gc_live_roots)
 }
 END_TEST
 
+START_TEST(gc_externals)
+{
+    void *var = malloc(4);
+    reg1 = gc_tag_external(var);
+
+    fail_unless(gc_externalp(reg1));
+
+    reg2 = sc_alloc_cons();
+
+    sc_set_car(reg2, reg1);
+
+    gc_gc();
+
+    fail_unless(gc_externalp(reg1));
+    fail_unless(gc_externalp(sc_car(reg2)));
+    fail_unless(reg1 == sc_car(reg2));
+    fail_unless(gc_untag_external(reg1) == var);
+
+    free(var);
+}
+END_TEST
+
+
 static void obarray_setup() {
     obarray_init();
 }
@@ -270,7 +293,6 @@ START_TEST(obarray_realloc)
 }
 END_TEST
 
-
 Suite *gc_suite()
 {
     Suite *s = suite_create("GC Test Suites");
@@ -289,6 +311,7 @@ Suite *gc_suite()
     tcase_add_test(tc_core, gc_root_hook);
     tcase_add_test(tc_core, gc_roots);
     tcase_add_test(tc_core, gc_live_roots);
+    tcase_add_test(tc_core, gc_externals);
     suite_add_tcase(s, tc_core);
 
     TCase *tc_obarray = tcase_create("obarray");

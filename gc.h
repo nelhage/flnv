@@ -48,8 +48,11 @@ void gc_register_gc_root_hook(gc_hook *);
 
 #define TAG_BITS     2
 #define TAG_MASK     0x03
+
+#define EXTERNAL_TAG 0x00
 #define NUMBER_TAG   0x01
 #define POINTER_TAG  0x02
+
 
 /* Here be demons */
 static inline gc_handle gc_tag_number(gc_int n) {
@@ -61,6 +64,11 @@ static inline gc_handle gc_tag_pointer(void *p) {
     return (gc_handle)((gc_int)p) | POINTER_TAG;
 }
 
+static inline gc_handle gc_tag_external(void *p) {
+    assert(!(((gc_int)p) & TAG_MASK));
+    return (gc_handle)((gc_int)p) | EXTERNAL_TAG;
+}
+
 static inline int gc_numberp(gc_handle h) {
     return (h & TAG_MASK) == NUMBER_TAG;
 }
@@ -69,8 +77,18 @@ static inline int gc_pointerp(gc_handle h) {
     return (h & TAG_MASK) == POINTER_TAG;
 }
 
+static inline int gc_externalp(gc_handle h) {
+    return (h & TAG_MASK) == EXTERNAL_TAG;
+}
+
 static inline gc_int gc_untag_number(gc_handle h) {
+    assert(gc_numberp(h));
     return (h >> TAG_BITS);
+}
+
+static inline void* gc_untag_external(gc_handle h) {
+    assert(gc_externalp(h));
+    return (void*)(h & ~TAG_MASK);
 }
 
 #define UNTAG_PTR(c, t) ((t*)(c & ~TAG_MASK))
