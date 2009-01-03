@@ -9,6 +9,7 @@ gc_handle reg1, reg2;
 
 static void gc_core_setup(void) {
     gc_init();
+    reg1 = reg2 = NIL;
     gc_register_roots(&reg1, &reg2, NULL);
 }
 
