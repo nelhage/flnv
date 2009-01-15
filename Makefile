@@ -1,7 +1,7 @@
 CC=gcc
 CFLAGS=-g -Wall $(DEFS) -D_GNU_SOURCE
 CPPFLAGS= -I.
-OBJECTS=gc.o scgc.o symbol.o
+OBJECTS=gc.o scgc.o symbol.o vm.o
 
 TEST_CFLAGS=$(shell pkg-config check --cflags)
 TEST_LIBS=$(shell pkg-config check --libs)
