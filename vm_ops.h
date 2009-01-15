@@ -9,7 +9,9 @@ enum vm_opcode {
     OP_DIV,
     OP_CONS,
     OP_CAR,
+    OP_SET_CAR,
     OP_CDR,
+    OP_SET_CDR,
     OP_MAKE_VECTOR,
     OP_VECTOR_REF,
     OP_VECTOR_SET,
@@ -41,8 +43,8 @@ enum vm_opcode {
 
 /********************************************************************
  * Opcode formats:
- * OOOOOOO XXXXYYYY 0000ZZZZ
- * OOOOOOO XXXXYYYY IIIIIIII
+ * OOOOOOO YYYYXXXX 0000ZZZZ
+ * OOOOOOO YYYYXXXX IIIIIIII
  ********************************************************************/
 
 #endif

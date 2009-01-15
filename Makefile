@@ -1,11 +1,12 @@
 CC=gcc
-CFLAGS=-g -Wall $(DEFS)
+CFLAGS=-g -Wall $(DEFS) -D_GNU_SOURCE
+CPPFLAGS= -I.
 OBJECTS=gc.o scgc.o symbol.o
 
 TEST_CFLAGS=$(shell pkg-config check --cflags)
 TEST_LIBS=$(shell pkg-config check --libs)
 TEST_LDFLAGS=
-TEST_OBJECTS=tests.o
+TEST_OBJECTS=tests.o test/gc.o test/vm.o
 TESTER=tests
 
 SOURCES=$(OBJECTS:.o=.c) $(TEST_OBJECTS:.o=.c)
