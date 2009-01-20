@@ -114,7 +114,7 @@ static void gc_relocate_external_roots(gc_external_roots *v) {
 }
 
 static uint32_t gc_len_external_roots(gc_external_roots *v) {
-    return v->nroots + 2;
+    return v->nroots + sizeof(gc_external_roots)/sizeof(gc_handle);
 }
 
 static gc_ops gc_external_root_ops = {
@@ -191,7 +191,7 @@ static void gc_relocate_root_hook(gc_root_hook *hook) {
 }
 
 static uint32_t gc_len_root_hook(gc_chunk *chunk) {
-    return 2;
+    return sizeof(gc_root_hook)/sizeof(gc_handle);
 }
 
 static struct gc_ops gc_root_hook_ops = {
@@ -227,7 +227,7 @@ void gc_relocate(gc_handle *v) {
 
     assert(val->ops);
 
-    len = val->ops->op_len(val) + 1;
+    len = val->ops->op_len(val);
 
     reloc = _gc_alloc(len);
     memcpy(reloc, val, sizeof(uintptr_t) * len);
@@ -284,7 +284,7 @@ void gc_gc() {
         assert(chunk->ops);
 
         chunk->ops->op_relocate(chunk);
-        scan += chunk->ops->op_len(chunk) + 1;
+        scan += chunk->ops->op_len(chunk);
 
         if(scan > working_mem + mem_size) {
             printf("GC internal error -- ran off the end of memory!\n");

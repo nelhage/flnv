@@ -35,19 +35,19 @@ typedef struct sc_boolean {
 /* Op functions */
 
 uint32_t sc_len_string(gc_chunk *v) {
-    return 1 + STRLEN2CELLS(((sc_string*)v)->strlen);
+    return sizeof(sc_string)/sizeof(gc_handle) + STRLEN2CELLS(((sc_string*)v)->strlen);
 }
 
 uint32_t sc_len_cons(gc_chunk *v UNUSED) {
-    return 2;
+    return sizeof(sc_cons)/sizeof(gc_handle);
 }
 
 uint32_t sc_len_vector(gc_chunk *v) {
-    return 1 + ((sc_vector*)v)->veclen;
+    return sizeof(sc_vector)/sizeof(gc_handle) + ((sc_vector*)v)->veclen;
 }
 
 uint32_t sc_len_boolean(gc_chunk *v UNUSED) {
-    return 1;
+    return sizeof(sc_boolean)/sizeof(gc_handle);
 }
 
 void sc_relocate_cons(gc_chunk *v) {
