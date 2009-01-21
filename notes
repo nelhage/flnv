@@ -36,10 +36,10 @@
 **** SET-CDR %rcons, %rcdr
 *** Vectors
 **** MAKE-VECTOR %rlen, %rout
-**** VECTOR-REF  %rv, %ri
-**** VECTOR-SET  %rv, %ri, %rval
+**** VECTOR-REF  %rv, %ri, %rout
+**** VECTOR-SET  %rval, %ri, %rv
 *** Environments
-**** EXTEND-ENV $n, %renv
+**** EXTEND-ENV %rpar, $n, %renv
 **** ENV-PARENT %renv, %rout
 **** ENV-REF    $i, %renv, %rout
 **** ENV-SET    $i, %rval, %renv
@@ -48,7 +48,6 @@
 **** NUMBER?    %rit, %rout
 **** VECTOR?    %rit, %rout
 **** NULL?      %rit, %rout
-**** TRUE?      %rit, %rout
 *** Comparisons
 **** EQ?        %r1, %r2, %rout
 **** =          %r1, %r2, %rout
