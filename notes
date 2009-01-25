@@ -42,6 +42,7 @@
 **** EXTEND-ENV %rpar, $n, %renv
 **** ENV-PARENT %renv, %rout
 **** ENV-REF    $i, %renv, %rout
+**** ENV-LOOKUP %name, %env, %out
 **** ENV-SET    $i, %rval, %renv
 *** Predicates
 **** CONS?      %rit, %rout

@@ -17,6 +17,7 @@ enum vm_opcode {
     OP_VECTOR_SET,
     OP_EXTEND_ENV,
     OP_ENV_PARENT,
+    OP_ENV_LOOKUP,
     OP_ENV_REF,
     OP_ENV_SET,
     OP_CONS_P,

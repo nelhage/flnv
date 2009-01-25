@@ -24,6 +24,7 @@ void (*vm_error_handler)(char *file, int line, char *err);
 typedef struct vm_env {
     gc_chunk  header;
     gc_handle parent;
+    gc_handle names;
     uint32_t  n_vars;
     gc_handle vars[];
 } vm_env;
@@ -33,7 +34,7 @@ uint32_t vm_len_env(vm_env *env) {
 }
 
 void vm_relocate_env(vm_env *env) {
-    int i;
+    unsigned int i;
 
     gc_relocate(&env->parent);
 
@@ -49,6 +50,7 @@ static struct gc_ops vm_env_ops = {
 
 gc_handle vm_alloc_env(uint32_t n_vars, gc_handle *parent) {
     vm_env *env = gc_alloc(&vm_env_ops, sizeof(vm_env)/sizeof(gc_handle) + n_vars);
+    env->names  = NIL;
     env->parent = *parent;
     env->n_vars = n_vars;
     return gc_tag_pointer(env);
@@ -62,6 +64,37 @@ int vm_envp(gc_handle h) {
 
 gc_handle vm_env_parent(gc_handle h) {
     return UNTAG_PTR(h, vm_env)->parent;
+}
+
+gc_handle vm_env_lookup_name(gc_handle h, gc_handle name) {
+    vm_env *e = UNTAG_PTR(h, vm_env);
+    uint32_t i;
+
+    if(NILP(e->names)) {
+        return NIL;
+    }
+    for(i = 0; i < sc_vector_len(e->names); i++) {
+        if(sc_vector_ref(e->names, i) == name) {
+            return e->vars[i];
+        }
+    }
+    return NIL;
+}
+
+void vm_env_set_named(gc_handle env, uint32_t idx, gc_handle name, gc_handle val) {
+    vm_env *e = UNTAG_PTR(env, vm_env);
+    gc_handle vec = NIL;
+
+    if(idx >= e->n_vars) {
+        die("ENV-SET-NAMED: Index %d out of bounds (size %d)", idx, e->n_vars);
+    }
+    e->vars[idx] = val;
+
+    gc_register_roots(&env, &name, &vec, NULL);
+    vec = sc_alloc_vector(e->n_vars);
+    sc_vector_set(vec, idx, name);
+    UNTAG_PTR(env, vm_env)->names = vec;
+    gc_pop_roots();
 }
 
 void vm_relocate_hook() {
@@ -289,6 +322,14 @@ void vm_step_one() {
         }
         break;
 
+    case OP_ENV_LOOKUP:
+        REG_ARGS_3;
+        if(!vm_envp(vm_regs[r2])) {
+            die("TYPECHECK ERROR -- ENV-LOOKUP");
+        }
+        vm_regs[r3] = vm_env_lookup_name(vm_regs[r2], vm_regs[r1]);
+        break;
+
     case OP_ENV_REF:
         REG_ARGS_2;
         INT_ARG;
@@ -387,6 +428,18 @@ void vm_step_one() {
 
         vm_push(gc_tag_external(vm_ip));
         vm_ip += iarg;
+        break;
+
+    case OP_PUSH:
+        REG_ARGS_1;
+
+        vm_push(vm_regs[r1]);
+        break;
+
+    case OP_POP:
+        REG_ARGS_1;
+
+        vm_regs[r1] = vm_pop();
         break;
     }
 }
