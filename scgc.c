@@ -185,6 +185,30 @@ int sc_numberp(gc_handle c) {
     return gc_numberp(c);
 }
 
+gc_handle sc_add(gc_handle lhs, gc_handle rhs) {
+    assert(sc_numberp(lhs));
+    assert(sc_numberp(rhs));
+    return sc_make_number(sc_number(lhs) + sc_number(rhs));
+}
+
+gc_handle sc_sub(gc_handle lhs, gc_handle rhs) {
+    assert(sc_numberp(lhs));
+    assert(sc_numberp(rhs));
+    return sc_make_number(sc_number(lhs) - sc_number(rhs));
+}
+
+gc_handle sc_mul(gc_handle lhs, gc_handle rhs) {
+    assert(sc_numberp(lhs));
+    assert(sc_numberp(rhs));
+    return sc_make_number(sc_number(lhs) * sc_number(rhs));
+}
+
+gc_handle sc_div(gc_handle lhs, gc_handle rhs) {
+    assert(sc_numberp(lhs));
+    assert(sc_numberp(rhs));
+    return sc_make_number(sc_number(lhs) - sc_number(rhs));
+}
+
 /* Memory allocation */
 
 gc_handle sc_alloc_cons() {

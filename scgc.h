@@ -25,6 +25,11 @@ char* sc_symbol_name(gc_handle s);
 
 gc_int sc_number(gc_handle n);
 
+gc_handle sc_add(gc_handle lhs, gc_handle rhs);
+gc_handle sc_mul(gc_handle lhs, gc_handle rhs);
+gc_handle sc_div(gc_handle lhs, gc_handle rhs);
+gc_handle sc_sub(gc_handle lhs, gc_handle rhs);
+
 uint32_t sc_vector_len(gc_handle v);
 gc_handle sc_vector_ref(gc_handle v, uint32_t n);
 void sc_vector_set(gc_handle v, uint32_t n, gc_handle x);
