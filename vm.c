@@ -14,7 +14,7 @@ void __die(char *file, int line, char *fmt, ...);
 #define REG_BITS   4
 #define STACK_SIZE 4096
 
-gc_handle vm_regs[N_REGS];
+gc_handle vm_env_reg;
 gc_handle *vm_stack = NULL;
 gc_handle *vm_stack_ptr = NULL;
 uint8_t   *vm_ip;
@@ -28,6 +28,18 @@ typedef struct vm_env {
     uint32_t  n_vars;
     gc_handle vars[];
 } vm_env;
+
+typedef struct vm_closure {
+    gc_chunk header;
+    gc_handle env;
+    uint8_t   *code;
+    int32_t   n_args;
+} vm_closure;
+
+typedef struct vm_builtin {
+    gc_chunk header;
+    void (*code)(void);
+} vm_builtin;
 
 uint32_t vm_len_env(vm_env *env) {
     return sizeof(vm_env)/sizeof(gc_handle) + env->n_vars;
@@ -43,9 +55,32 @@ void vm_relocate_env(vm_env *env) {
     }
 }
 
+uint32_t vm_len_closure(vm_closure *c UNUSED) {
+    return sizeof(vm_closure)/sizeof(gc_handle);
+}
+
+void vm_relocate_closure(vm_closure *c UNUSED) {
+    gc_relocate(&c->env);
+}
+
+uint32_t vm_len_builtin(vm_builtin *b UNUSED) {
+    return sizeof(vm_builtin)/sizeof(gc_handle);
+}
+
+
 static struct gc_ops vm_env_ops = {
     .op_relocate  = (gc_relocate_op)vm_relocate_env,
     .op_len       = (gc_len_op)vm_len_env
+};
+
+static struct gc_ops vm_closure_ops = {
+    .op_relocate = (gc_relocate_op)vm_relocate_closure,
+    .op_len      = (gc_len_op)vm_len_closure
+};
+
+static struct gc_ops vm_builtin_ops = {
+    .op_relocate = (gc_relocate_op)gc_relocate_nop,
+    .op_len      = (gc_len_op)vm_len_builtin
 };
 
 gc_handle vm_alloc_env(uint32_t n_vars, gc_handle *parent) {
@@ -97,13 +132,16 @@ void vm_env_set_named(gc_handle env, uint32_t idx, gc_handle name, gc_handle val
     gc_pop_roots();
 }
 
+int vm_procedurep(gc_handle h) {
+    return gc_pointerp(h) && !NILP(h)
+        && (UNTAG_PTR(h, gc_chunk)->ops == &vm_closure_ops ||
+            UNTAG_PTR(h, gc_chunk)->ops == &vm_builtin_ops);
+}
+
 void vm_relocate_hook() {
-    int i;
     gc_handle *sp;
 
-    for(i = 0; i < N_REGS; i++) {
-        gc_relocate(&vm_regs[i]);
-    }
+    gc_relocate(&vm_env_reg);
 
     for(sp = vm_stack; sp < vm_stack_ptr; sp++) {
         gc_relocate(sp);
@@ -111,8 +149,6 @@ void vm_relocate_hook() {
 }
 
 void vm_init() {
-    int i;
-
     if(vm_stack != NULL) {
         free(vm_stack);
     }
@@ -122,283 +158,238 @@ void vm_init() {
     vm_stack = malloc(STACK_SIZE * sizeof(gc_handle));
     vm_stack_ptr = vm_stack;
 
-    for(i = 0; i < N_REGS; i++) {
-        vm_regs[i] = NIL;
-    }
+    vm_env_reg = NIL;
 
     gc_register_gc_root_hook(vm_relocate_hook);
-}
-
-static inline void type_check_reg(uint8_t reg, int (*pred)(gc_handle), char *fn) {
-    if(!pred(vm_regs[reg])) {
-        die("TYPECHECK ERROR -- %s", fn);
-    }
 }
 
 void vm_set_ip(uint8_t *codeptr) {
     vm_ip = codeptr;
 }
 
-void vm_push(gc_handle h) {
+inline void vm_push(gc_handle h) {
     *(vm_stack_ptr++) = h;
 }
 
-gc_handle vm_pop() {
+inline gc_handle vm_pop() {
     vm_stack_ptr--;
     return *(vm_stack_ptr);
 }
 
+inline gc_handle vm_top() {
+    return *(vm_stack_ptr-1);
+}
+
+inline gc_handle vm_pop_tc(int (*predicate)(gc_handle), char *why) {
+    gc_handle top = vm_pop();
+    if(!predicate(top)) {
+        die("TYPECHECK ERROR -- %s", why);
+    }
+    return top;
+}
+
 void vm_step_one() {
-    uint8_t r1, r2, r3;
     uint32_t iarg;
-
-#define REG_ARGS_1 do {                         \
-        r1 = *vm_ip & 0x0F;                     \
-        vm_ip++;                                \
-    } while(0)                                  \
-
-#define REG_ARGS_2 do {                         \
-        r1 = *vm_ip & 0x0F;                     \
-        r2 = *vm_ip >> 4;                       \
-        vm_ip++;                                \
-    } while(0)
-
-#define REG_ARGS_3 do {                         \
-        REG_ARGS_2;                             \
-        r3 = *vm_ip & 0x0F;                     \
-        vm_ip++;                                \
-    } while(0)
 
 #define INT_ARG do {                            \
         iarg = *((uint32_t*)vm_ip);             \
         vm_ip += sizeof(uint32_t);              \
     } while(0)
 
-#define TC1(pred, name) do {                    \
-        type_check_reg(r1, pred, name); \
-    } while (0)
-
-#define TC2(pred, name) do {                    \
-        type_check_reg(r1, pred, name); \
-        type_check_reg(r2, pred, name); \
-    } while (0)
-
-    switch(*(vm_ip++)) {
+    switch((enum vm_opcode)*(vm_ip++)) {
     case OP_NOP:
         break;
 
-    case OP_ADD:
-        REG_ARGS_3;
-        TC2(sc_numberp, "ADD");
-
-        vm_regs[r3] = sc_make_number(sc_number(vm_regs[r1]) +
-                                     sc_number(vm_regs[r2]));
+    case OP_ADD: {
+        gc_handle rhs = vm_pop_tc(sc_numberp, "ADD");
+        gc_handle lhs = vm_pop_tc(sc_numberp, "ADD");
+        vm_push(sc_add(lhs, rhs));
         break;
+    }
 
-    case OP_SUB:
-        REG_ARGS_3;
-        TC2(sc_numberp, "SUB");
-
-        vm_regs[r3] = sc_make_number(sc_number(vm_regs[r1]) -
-                                     sc_number(vm_regs[r2]));
+    case OP_SUB: {
+        gc_handle rhs = vm_pop_tc(sc_numberp, "SUB");
+        gc_handle lhs = vm_pop_tc(sc_numberp, "SUB");
+        vm_push(sc_sub(lhs, rhs));
         break;
-    case OP_MUL:
-        REG_ARGS_3;
-        TC2(sc_numberp, "SUB");
+    }
 
-        vm_regs[r3] = sc_make_number(sc_number(vm_regs[r1]) *
-                                     sc_number(vm_regs[r2]));
+    case OP_MUL: {
+        gc_handle rhs = vm_pop_tc(sc_numberp, "MUL");
+        gc_handle lhs = vm_pop_tc(sc_numberp, "MUL");
+        vm_push(sc_mul(lhs, rhs));
         break;
-    case OP_DIV:
-        REG_ARGS_3;
-        TC2(sc_numberp, "SUB");
+    }
 
-        vm_regs[r3] = sc_make_number(sc_number(vm_regs[r1]) /
-                                     sc_number(vm_regs[r2]));
+    case OP_DIV: {
+        gc_handle rhs = vm_pop_tc(sc_numberp, "DIV");
+        gc_handle lhs = vm_pop_tc(sc_numberp, "DIV");
+        vm_push(sc_div(lhs, rhs));
         break;
+    }
 
         /* Pairs */
-    case OP_CONS:
-        REG_ARGS_3;
-
-        vm_regs[r3] = sc_alloc_cons();
-        sc_set_car(vm_regs[r3], vm_regs[r1]);
-        sc_set_cdr(vm_regs[r3], vm_regs[r2]);
+    case OP_CONS: {
+        gc_handle cons = sc_alloc_cons();
+        sc_set_cdr(cons, vm_pop());
+        sc_set_car(cons, vm_pop());
+        vm_push(cons);
         break;
+    }
 
     case OP_CAR:
-        REG_ARGS_2;
-        TC1(sc_consp, "CAR");
-
-        vm_regs[r2] = sc_car(vm_regs[r1]);
+        vm_push(sc_car(vm_pop_tc(sc_consp, "CAR")));
         break;
 
     case OP_CDR:
-        REG_ARGS_2;
-        TC1(sc_consp, "CDR");
-
-        vm_regs[r2] = sc_cdr(vm_regs[r1]);
+        vm_push(sc_cdr(vm_pop_tc(sc_consp, "CDR")));
         break;
 
-    case OP_SET_CAR:
-        REG_ARGS_2;
-        TC1(sc_consp, "SET-CAR");
-
-        sc_set_car(vm_regs[r2], vm_regs[r1]);
+    case OP_SET_CAR: {
+        gc_handle car = vm_pop();
+        sc_set_car(vm_pop_tc(sc_consp, "SET-CAR"), car);
         break;
+    }
 
-    case OP_SET_CDR:
-        REG_ARGS_2;
-        TC1(sc_consp, "SET-CDR");
-
-        sc_set_cdr(vm_regs[r2], vm_regs[r1]);
+    case OP_SET_CDR: {
+        gc_handle cdr = vm_pop();
+        sc_set_cdr(vm_pop_tc(sc_consp, "SET-CDR"), cdr);
         break;
+    }
 
         /* Vectors */
-    case OP_MAKE_VECTOR:
-        REG_ARGS_2;
-        TC1(sc_numberp, "MAKE-VECTOR");
-
-        vm_regs[r2] = sc_alloc_vector(sc_number(vm_regs[r1]));
+    case OP_MAKE_VECTOR: {
+        int len = sc_number(vm_pop_tc(sc_numberp, "MAKE-VECTOR"));
+        vm_push(sc_alloc_vector(len));
         break;
+    }
 
     case OP_VECTOR_REF: {
         unsigned int idx;
         gc_handle vec;
 
-        REG_ARGS_3;
-        TC1(sc_vectorp, "VECTOR-REF");
-        type_check_reg(r2, sc_numberp, "VECTOR-REF");
-
-        vec = vm_regs[r1];
-        idx = sc_number(vm_regs[r2]);
+        idx = sc_number(vm_pop_tc(sc_numberp, "VECTOR-REF"));
+        vec = vm_pop_tc(sc_vectorp, "VECTOR-REF");
 
         if(idx >= sc_vector_len(vec)) {
             die("Index %d out-of-bounds (len %d) in VECTOR-REF", idx, sc_vector_len(vec));
         }
 
-        vm_regs[r3] = sc_vector_ref(vec, idx);
+        vm_push(sc_vector_ref(vec, idx));
         break;
     }
 
     case OP_VECTOR_SET: {
         unsigned int idx;
-        gc_handle vec;
+        gc_handle vec, val;
 
-        REG_ARGS_3;
-        type_check_reg(r2, sc_numberp, "VECTOR-SET");
-        type_check_reg(r3, sc_vectorp, "VECTOR-SET");
-
-        vec = vm_regs[r3];
-        idx = sc_number(vm_regs[r2]);
+        val = vm_pop();
+        idx = sc_number(vm_pop_tc(sc_numberp, "VECTOR-SET"));
+        vec = vm_pop_tc(sc_vectorp, "VECTOR-SET");
 
         if(idx >= sc_vector_len(vec)) {
             die("Index %d out-of-bounds (len %d) in VECTOR-SET", idx, sc_vector_len(vec));
         }
 
-        sc_vector_set(vec, idx, vm_regs[r3]);
+        sc_vector_set(vec, idx, val);
         break;
     }
         /* Environments */
 
-    case OP_EXTEND_ENV:
-        REG_ARGS_2;
-        INT_ARG;
+    case OP_EXTEND_ENV: {
+        int size = sc_number(vm_pop_tc(sc_numberp, "EXTEND-ENV"));
+        int i;
 
-        TC1(vm_envp, "EXTEND-ENV");
-
-        vm_regs[r2] = vm_alloc_env(iarg, &vm_regs[r1]);
-        break;
-
-    case OP_ENV_PARENT:
-        REG_ARGS_2;
-
-        TC1(vm_envp, "ENV-PARENT");
-
-        if(NILP(vm_regs[r1])) {
-            die("ENV-PARENT on a NIL environment");
-        } else {
-            vm_regs[r2] = vm_env_parent(vm_regs[r1]);
+        gc_handle env = vm_alloc_env(size, &vm_env_reg);
+        for(i = size-1; i >=0; i--) {
+            UNTAG_PTR(env, vm_env)->vars[i] = vm_pop();
         }
         break;
+    }
 
-    case OP_ENV_LOOKUP:
-        REG_ARGS_3;
-        if(!vm_envp(vm_regs[r2])) {
-            die("TYPECHECK ERROR -- ENV-LOOKUP");
+    case OP_ENV_PARENT: {
+        vm_env_reg = vm_env_parent(vm_env_reg);
+        break;
+    }
+
+    case OP_ENV_LOOKUP: {
+        gc_handle name = vm_pop();
+        gc_handle val = NIL;
+        gc_handle env = vm_env_reg;
+        while(NILP(val) && !NILP(env)) {
+            val = vm_env_lookup_name(env, name);
+            env = vm_env_parent(env);
         }
-        vm_regs[r3] = vm_env_lookup_name(vm_regs[r2], vm_regs[r1]);
+        vm_push(val);
         break;
+    }
 
-    case OP_ENV_REF:
-        REG_ARGS_2;
-        INT_ARG;
-
-        TC1(vm_envp, "ENV-REF");
-        vm_regs[r2] = UNTAG_PTR(vm_regs[r1], vm_env)->vars[iarg];
-        break;
-
-    case OP_ENV_SET:
-        REG_ARGS_2;
-        INT_ARG;
-
-        if(!vm_envp(vm_regs[r2])) {
-            die("TYPECHECK ERROR -- ENV-SET");
+    case OP_ENV_REF: {
+        int frame  = sc_number(vm_pop_tc(sc_numberp, "ENV-REF"));
+        gc_int idx = sc_number(vm_pop_tc(sc_numberp, "ENV-REF"));
+        gc_handle env = vm_env_reg;
+        vm_env    *envp;
+        while(frame-- && !NILP(env)) {
+            env = vm_env_parent(env);
+        }
+        if(NILP(env)) {
+            die("Frame out of bounds -- ENV-REF");
         }
 
-        UNTAG_PTR(vm_regs[r1], vm_env)->vars[iarg] = vm_regs[r2];
-        break;
+        envp = UNTAG_PTR(env, vm_env);
+        if((uint32_t)idx >= envp->n_vars) {
+            die("Environment reference out of bounds -- ENV-REF");
+        }
 
+        vm_push(envp->vars[idx]);
+        break;
+    }
+
+    case OP_ENV_SET: {
+        int frame  = sc_number(vm_pop_tc(sc_numberp, "ENV-SET"));
+        gc_int idx = sc_number(vm_pop_tc(sc_numberp, "ENV-SET"));
+        gc_handle val = vm_pop();
+        gc_handle env = vm_env_reg;
+        vm_env    *envp;
+        while(frame-- && !NILP(env)) {
+            env = vm_env_parent(env);
+        }
+        if(NILP(env)) {
+            die("Frame out of bounds -- ENV-REF");
+        }
+
+        envp = UNTAG_PTR(env, vm_env);
+        if((uint32_t)idx >= envp->n_vars) {
+            die("Environment reference out of bounds -- ENV-REF");
+        }
+
+        envp->vars[idx] = val;
+        break;
+    }
         /* Predicates */
 
-    case OP_CONS_P:
-        REG_ARGS_2;
-
-        vm_regs[r2] = sc_consp(vm_regs[r1]) ? sc_true : sc_false;
+#define VM_PREDICATE(op, pred)                                  \
+        case OP_##op##_P:                                       \
+            vm_push(pred(vm_pop()) ? sc_true : sc_false);       \
         break;
 
-    case OP_NUMBER_P:
-        REG_ARGS_2;
+        VM_PREDICATE(CONS, sc_consp);
+        VM_PREDICATE(NUMBER, sc_numberp);
+        VM_PREDICATE(VECTOR, sc_vectorp);
+        VM_PREDICATE(BOOLEAN, sc_booleanp);
+        VM_PREDICATE(NULL, NILP);
+        VM_PREDICATE(PROCEDURE, vm_procedurep);
 
-        vm_regs[r2] = sc_numberp(vm_regs[r1]) ? sc_true : sc_false;
-        break;
+    case OP_INVOKE_PROCEDURE:
+        die("Unimplemented!");
 
-    case OP_VECTOR_P:
-        REG_ARGS_2;
-
-        vm_regs[r2] = sc_vectorp(vm_regs[r1]) ? sc_true : sc_false;
-        break;
-
-    case OP_BOOLEAN_P:
-        REG_ARGS_2;
-
-        vm_regs[r2] = sc_booleanp(vm_regs[r1]) ? sc_true : sc_false;
-        break;
-
-    case OP_NULL_P:
-        REG_ARGS_2;
-
-        vm_regs[r2] = NILP(vm_regs[r1]) ? sc_true : sc_false;
         break;
 
         /* VM control ops*/
-    case OP_LOAD_INT:
-        REG_ARGS_1;
+    case OP_PUSH_INT:
         INT_ARG;
 
-        vm_regs[r1] = sc_make_number(iarg);
-        break;
-
-    case OP_LOAD_NULL:
-        REG_ARGS_1;
-
-        vm_regs[r1] = NIL;
-        break;
-
-    case OP_MOV:
-        REG_ARGS_1;
-
-        vm_regs[r2] = vm_regs[r1];
+        vm_push(sc_make_number(iarg));
         break;
 
     case OP_BRANCH:
@@ -408,48 +399,30 @@ void vm_step_one() {
         break;
 
     case OP_JMP:
-        REG_ARGS_1;
-        type_check_reg(r1, gc_externalp, "JMP");
-
-        vm_ip = gc_untag_external(r1);
+        vm_ip = gc_untag_external(vm_pop_tc(gc_externalp, "JMP"));
         break;
 
     case OP_JT:
-        REG_ARGS_1;
         INT_ARG;
 
-        if(vm_regs[r1] != sc_false) {
+        if(vm_pop() != sc_false) {
             vm_ip += iarg;
         }
         break;
 
-    case OP_CALL:
+    case OP_PUSH_ADDR:
         INT_ARG;
 
-        vm_push(gc_tag_external(vm_ip));
-        vm_ip += iarg;
-        break;
-
-    case OP_PUSH:
-        REG_ARGS_1;
-
-        vm_push(vm_regs[r1]);
+        vm_push(gc_tag_external(vm_ip + iarg));
         break;
 
     case OP_POP:
-        REG_ARGS_1;
-
-        vm_regs[r1] = vm_pop();
+        vm_pop();
         break;
-    }
-}
 
-gc_handle vm_read_reg(uint8_t regnum) {
-    if(regnum >= N_REGS) {
-        die("Bad register: %d", regnum);
+    default:
+        die("Unknown opcode %02X", *(vm_ip - 1));
     }
-
-    return vm_regs[regnum];
 }
 
 void __die(char *file, int line, char *fmt, ...)
