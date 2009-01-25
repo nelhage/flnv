@@ -22,7 +22,7 @@ $(TESTER): LDLIBS += $(TEST_LIBS)
 $(TESTER): $(TEST_OBJECTS) $(OBJECTS)
 
 clean:
-	rm -f *.o $(TEST)
+	rm -f $(TESTER) $(OBJECTS) $(TEST_OBJECTS)
 
 check-syntax:
 	$(CC) $(CCFLAGS) -Wall -Wextra -fsyntax-only $(CHK_SOURCES)
