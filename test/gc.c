@@ -29,6 +29,7 @@ START_TEST(gc_sanity_check)
     sc_set_cdr(reg2, NIL);
     reg2 = NIL;
 
+    fail_unless(sc_number(sc_make_number(-1234)) == -1234);
     fail_unless(sc_numberp(sc_car(reg1)));
     fail_unless(sc_number(sc_car(reg1)) == 32);
     fail_unless(sc_consp(sc_cdr(reg1)));
