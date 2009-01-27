@@ -330,6 +330,7 @@ void vm_step_one() {
         for(i = size-1; i >=0; i--) {
             UNTAG_PTR(env, vm_env)->vars[i] = vm_pop();
         }
+        vm_env_reg = env;
         break;
     }
 
@@ -482,8 +483,8 @@ void vm_step_one() {
     case OP_SWAP: {
         gc_handle top = vm_pop();
         gc_handle snd = vm_pop();
-        vm_push(snd);
         vm_push(top);
+        vm_push(snd);
 
         break;
     }
