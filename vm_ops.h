@@ -39,7 +39,9 @@ enum vm_opcode {
     OP_JMP,
     OP_JT,
     OP_PUSH_ADDR,
-    OP_POP
+    OP_POP,
+    OP_SWAP,
+    OP_DUP
 };
 
 /********************************************************************

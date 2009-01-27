@@ -21,6 +21,11 @@
 ** number
 ** symbol
 
+* Calling convention
+** Push arguments on the stack in reverse order
+** INVOKE-PROCEDURE $argc, %proc
+*** 
+
 * opcodes
 ** Data
 *** Arithmetic
@@ -49,6 +54,10 @@
 **** NUMBER?    %rit, %rout
 **** VECTOR?    %rit, %rout
 **** NULL?      %rit, %rout
+**** PROCEDURE? %rit, %rout
+*** Procedures
+**** INVOKE-PROCEDURE $argc, %proc
+**** MAKE-CLOSURE[reladdr]  n-args  
 *** Comparisons
 **** EQ?        %r1, %r2, %rout
 **** =          %r1, %r2, %rout
@@ -63,7 +72,13 @@
 *** BRANCH      $reladdr
 *** JMP         %reg
 *** JT          %reg, $reladdr
-*** CALL        $reladdr
 ** Stack
 *** PUSH        %reg
+*** PUSH-ADDR   $offset
 *** POP         %reg
+* TODO
+** Procedures and procedure call
+** .data handling
+** Executable loading
+** Executable generation (hs)
+** Compilation

@@ -33,12 +33,12 @@ typedef struct vm_closure {
     gc_chunk header;
     gc_handle env;
     uint8_t   *code;
-    int32_t   n_args;
+    int32_t   argc;
 } vm_closure;
 
 typedef struct vm_builtin {
     gc_chunk header;
-    void (*code)(void);
+    void (*code)(int);
 } vm_builtin;
 
 uint32_t vm_len_env(vm_env *env) {
@@ -86,9 +86,19 @@ static struct gc_ops vm_builtin_ops = {
 gc_handle vm_alloc_env(uint32_t n_vars, gc_handle *parent) {
     vm_env *env = gc_alloc(&vm_env_ops, sizeof(vm_env)/sizeof(gc_handle) + n_vars);
     env->names  = NIL;
-    env->parent = *parent;
+    if(parent) {
+        env->parent = *parent;
+    }
     env->n_vars = n_vars;
     return gc_tag_pointer(env);
+}
+
+gc_handle vm_alloc_closure(uint8_t *code, uint32_t argc, gc_handle *env) {
+    vm_closure *c = gc_alloc(&vm_closure_ops, sizeof(vm_closure)/sizeof(gc_handle));
+    c->code = code;
+    c->argc = argc;
+    c->env = *env;
+    return gc_tag_pointer(c);
 }
 
 int vm_envp(gc_handle h) {
@@ -136,6 +146,16 @@ int vm_procedurep(gc_handle h) {
     return gc_pointerp(h) && !NILP(h)
         && (UNTAG_PTR(h, gc_chunk)->ops == &vm_closure_ops ||
             UNTAG_PTR(h, gc_chunk)->ops == &vm_builtin_ops);
+}
+
+int vm_closurep(gc_handle h) {
+    return gc_pointerp(h) && !NILP(h)
+        && (UNTAG_PTR(h, gc_chunk)->ops == &vm_closure_ops);
+}
+
+int vm_builtinp(gc_handle h) {
+    return gc_pointerp(h) && !NILP(h)
+        && (UNTAG_PTR(h, gc_chunk)->ops == &vm_builtin_ops);
 }
 
 void vm_relocate_hook() {
@@ -380,10 +400,43 @@ void vm_step_one() {
         VM_PREDICATE(NULL, NILP);
         VM_PREDICATE(PROCEDURE, vm_procedurep);
 
-    case OP_INVOKE_PROCEDURE:
-        die("Unimplemented!");
+    case OP_INVOKE_PROCEDURE: {
+        int i;
+        int argc = sc_number(vm_pop_tc(sc_numberp, "INVOKE-PROCEDURE"));
+        gc_handle dst = vm_pop_tc(vm_procedurep, "INVOKE-PROCEDURE");
+
+        if(vm_closurep(dst)) {
+            gc_register_roots(&dst, NULL);
+            gc_handle env;
+            vm_env *envp;
+
+            env = vm_alloc_env(argc, &UNTAG_PTR(dst, vm_closure)->env);
+            envp = UNTAG_PTR(env, vm_env);
+
+            for(i = argc-1; i >= 0; i--) {
+                envp->vars[i] = vm_pop();
+            }
+
+            gc_pop_roots();
+
+            vm_env_reg = env;
+            vm_ip = UNTAG_PTR(dst, vm_closure)->code;
+        } else if(vm_builtinp(dst)) {
+            UNTAG_PTR(dst, vm_builtin)->code(argc);
+        } else {
+            die("Internal error -- INVOKE-PROCEDURE");
+        }
 
         break;
+    }
+
+    case OP_MAKE_CLOSURE: {
+        INT_ARG;
+        int argc = sc_number(vm_pop_tc(sc_numberp, "MAKE-CLOSURE"));
+
+        vm_push(vm_alloc_closure(vm_ip + iarg, argc, &vm_env_reg));
+        break;
+    }
 
         /* VM control ops*/
     case OP_PUSH_INT:
@@ -418,6 +471,20 @@ void vm_step_one() {
 
     case OP_POP:
         vm_pop();
+        break;
+
+    case OP_SWAP: {
+        gc_handle top = vm_pop();
+        gc_handle snd = vm_pop();
+        vm_push(snd);
+        vm_push(top);
+
+        break;
+    }
+
+    case OP_DUP:
+        vm_push(vm_top());
+
         break;
 
     default:
