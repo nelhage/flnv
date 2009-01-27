@@ -258,7 +258,6 @@ void gc_protect_roots() {
 
 void gc_gc() {
     uint32_t old_avail = gc_free_mem();
-    printf("Entering garbage collection...");
     uint32_t *scan;
     uint32_t *t;
 
@@ -301,14 +300,11 @@ void gc_gc() {
        holds onto gc_handle's during GC.*/
     memset(free_mem, 0, sizeof(uintptr_t) * mem_size);
 #endif
-    printf("Done (freed %d words)\n", gc_free_mem() - old_avail);
 }
 
 void gc_realloc(uint32_t need) {
-    printf("GC realloc forced!\n");
     uint32_t new_size = mem_size;
     while(new_size - mem_size < need) new_size <<= 1;
-    printf("New memory: %d words\n", new_size);
 
     free(free_mem);
     free_mem = malloc(new_size * sizeof(uintptr_t));
