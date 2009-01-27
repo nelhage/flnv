@@ -65,41 +65,44 @@ START_TEST(vm_arithmetic)
     int ops = 0;
     gc_handle v;
 
-    EMIT_OP(OP_PUSH_INT); ops++;
+    vm_set_ip(buf);
+
+    EMIT_OP(OP_PUSH_INT);
     EMIT_INT(1024);
+    vm_step_one();
 
     EMIT_OP(OP_PUSH_INT); ops++;
     EMIT_INT(72);
+    vm_step_one();
 
     EMIT_OP(OP_ADD); ops++;
+    vm_step_one();
 
-    /*    EMIT_OP(OP_SUB); ops++;
-    EMIT_REG3(0, 1, 3);
-
-    EMIT_OP(OP_MUL); ops++;
-    EMIT_REG3(2, 3, 4);
-
-    EMIT_OP(OP_DIV); ops++;
-    EMIT_REG3(4, 3, 5);
-    */
-
-    vm_set_ip(buf);
-    while(ops--) vm_step_one();
-
-    v = vm_pop();
+    v = vm_top();
     fail_unless(sc_numberp(v));
     fail_unless(sc_number(v) == (1024+72));
 
-    /*
-    fail_unless(sc_numberp(vm_read_reg(3)));
-    fail_unless(sc_number(vm_read_reg(3)) == (1024-72));
+    EMIT_OP(OP_PUSH_INT); ops++;
+    EMIT_INT(7777);
+    vm_step_one();
 
-    fail_unless(sc_numberp(vm_read_reg(4)));
-    fail_unless(sc_number(vm_read_reg(4)) == (1024+72)*(1024-72));
+    EMIT_OP(OP_SUB); ops++;
+    vm_step_one();
 
-    fail_unless(sc_numberp(vm_read_reg(5)));
-    fail_unless(sc_number(vm_read_reg(5)) == (1024+72));
-    */
+    v = vm_top();
+    fail_unless(sc_numberp(v));
+    fail_unless(sc_number(v) == (1024+72)-7777);
+
+    EMIT_OP(OP_PUSH_INT); ops++;
+    EMIT_INT(1234);
+    vm_step_one();
+
+    EMIT_OP(OP_MUL); ops++;
+    vm_step_one();
+
+    v = vm_top();
+    fail_unless(sc_numberp(v));
+    fail_unless(sc_number(v) == ((1024+72)-7777)*1234);
 }
 END_TEST
 
