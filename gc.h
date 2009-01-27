@@ -83,7 +83,7 @@ static inline int gc_externalp(gc_handle h) {
 
 static inline gc_int gc_untag_number(gc_handle h) {
     assert(gc_numberp(h));
-    return (h >> TAG_BITS);
+    return ((gc_int)h >> TAG_BITS);
 }
 
 static inline void* gc_untag_external(gc_handle h) {
