@@ -25,7 +25,7 @@ clean:
 	rm -f $(TESTER) $(OBJECTS) $(TEST_OBJECTS)
 
 check-syntax:
-	$(CC) $(CCFLAGS) -Wall -Wextra -fsyntax-only $(CHK_SOURCES)
+	$(CC) $(CFLAGS) $(CPPFLAGS) -Wall -Wextra -fsyntax-only $(CHK_SOURCES)
 
 %.d: %.c
 	@set -e; rm -f $@; \
