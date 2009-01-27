@@ -27,7 +27,6 @@ gc_handle sc_intern_symbol(char * name) {
     /* Symbol not found, allocate one and stick it in the obarray */
     if( i == len) {
         /* We ran off the end -- realloc the obarray */
-        printf("Obarray realloc forced, new size %d\n", len << 1);
         gc_handle oa = sc_alloc_vector(len << 1);
         for(i = 0; i < len; i++) {
             sc_vector_set(oa, i, sc_vector_ref(obarray,i));
