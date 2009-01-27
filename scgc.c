@@ -206,7 +206,7 @@ gc_handle sc_mul(gc_handle lhs, gc_handle rhs) {
 gc_handle sc_div(gc_handle lhs, gc_handle rhs) {
     assert(sc_numberp(lhs));
     assert(sc_numberp(rhs));
-    return sc_make_number(sc_number(lhs) - sc_number(rhs));
+    return sc_make_number(sc_number(lhs) / sc_number(rhs));
 }
 
 /* Memory allocation */
