@@ -41,7 +41,8 @@ enum vm_opcode {
     OP_PUSH_ADDR,
     OP_POP,
     OP_SWAP,
-    OP_DUP
+    OP_DUP,
+    OP_QUIT
 };
 
 /********************************************************************

@@ -18,6 +18,7 @@ gc_handle vm_env_reg;
 gc_handle *vm_stack = NULL;
 gc_handle *vm_stack_ptr = NULL;
 uint8_t   *vm_ip;
+int       vm_terminated;
 
 void (*vm_error_handler)(char *file, int line, char *err);
 
@@ -173,6 +174,7 @@ void vm_init() {
         free(vm_stack);
     }
 
+    vm_terminated = 0;
     vm_error_handler = NULL;
 
     vm_stack = malloc(STACK_SIZE * sizeof(gc_handle));
@@ -189,6 +191,10 @@ void vm_set_ip(uint8_t *codeptr) {
 
 inline void vm_push(gc_handle h) {
     *(vm_stack_ptr++) = h;
+}
+
+int vm_terminatedp() {
+    return vm_terminated;
 }
 
 inline gc_handle vm_pop() {
@@ -485,6 +491,11 @@ void vm_step_one() {
     case OP_DUP:
         vm_push(vm_top());
 
+        break;
+
+    case OP_QUIT:
+
+        vm_terminated = 1;
         break;
 
     default:

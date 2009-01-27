@@ -7,8 +7,11 @@ void vm_init();
 void vm_step_one();
 void vm_set_ip(uint8_t *codeptr);
 
+int vm_terminatedp();
+
 gc_handle vm_top();
 gc_handle vm_pop();
+
 
 #endif
 
