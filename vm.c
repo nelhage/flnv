@@ -14,10 +14,14 @@ void __die(char *file, int line, char *fmt, ...);
 #define REG_BITS   4
 #define STACK_SIZE 4096
 
+typedef uint8_t vm_inst;
+
 gc_handle vm_env_reg;
+vm_inst **vm_jmp_stack = NULL;
+vm_inst **vm_jmp_stack_ptr = NULL;
 gc_handle *vm_stack = NULL;
 gc_handle *vm_stack_ptr = NULL;
-uint8_t   *vm_ip;
+vm_inst   *vm_ip;
 int       vm_terminated;
 
 void (*vm_error_handler)(char *file, int line, char *err);
@@ -173,12 +177,18 @@ void vm_init() {
     if(vm_stack != NULL) {
         free(vm_stack);
     }
+    if(vm_jmp_stack != NULL) {
+        free(vm_jmp_stack);
+    }
 
     vm_terminated = 0;
     vm_error_handler = NULL;
 
     vm_stack = malloc(STACK_SIZE * sizeof(gc_handle));
     vm_stack_ptr = vm_stack;
+
+    vm_jmp_stack = malloc(STACK_SIZE * sizeof(gc_handle));
+    vm_jmp_stack_ptr = vm_jmp_stack;
 
     vm_env_reg = NIL;
 
@@ -193,6 +203,10 @@ inline void vm_push(gc_handle h) {
     *(vm_stack_ptr++) = h;
 }
 
+inline void vm_push_jmp(vm_inst *h) {
+    *(vm_jmp_stack_ptr++) = h;
+}
+
 int vm_terminatedp() {
     return vm_terminated;
 }
@@ -200,6 +214,11 @@ int vm_terminatedp() {
 inline gc_handle vm_pop() {
     vm_stack_ptr--;
     return *(vm_stack_ptr);
+}
+
+inline vm_inst* vm_pop_jmp() {
+    vm_jmp_stack_ptr--;
+    return *(vm_jmp_stack_ptr);
 }
 
 inline gc_handle vm_top() {
@@ -459,7 +478,7 @@ void vm_step_one() {
         break;
 
     case OP_JMP:
-        vm_ip = gc_untag_external(vm_pop_tc(gc_externalp, "JMP"));
+        vm_ip = vm_pop_jmp();
         break;
 
     case OP_JT:
@@ -473,7 +492,7 @@ void vm_step_one() {
     case OP_PUSH_ADDR:
         INT_ARG;
 
-        vm_push(gc_tag_external(vm_ip + iarg));
+        vm_push_jmp(vm_ip + iarg);
         break;
 
     case OP_POP:

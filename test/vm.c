@@ -124,7 +124,6 @@ START_TEST(vm_closure)
     PI(0); PI(0); OP(ENV_REF);
     OP(DUP);
     OP(MUL);
-    OP(SWAP);
     OP(JMP);
 
     ALIGN_CODE;

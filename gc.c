@@ -257,7 +257,6 @@ void gc_protect_roots() {
 }
 
 void gc_gc() {
-    uint32_t old_avail = gc_free_mem();
     uint32_t *scan;
     uint32_t *t;
 
