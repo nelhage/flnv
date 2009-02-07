@@ -108,7 +108,6 @@ END_TEST
 #define OP(o)           EMIT_OP(OP_##o)
 #define I               EMIT_INT
 #define PI(i)           do{OP(PUSH_INT); I(i);} while(0)
-#define ALIGN_CODE      while((uint32_t)code % 4) {OP(NOP);}
 
 START_TEST(vm_closure)
 {
@@ -118,15 +117,11 @@ START_TEST(vm_closure)
     uint8_t *reloc;
 
     /* Define a square function */
-    ALIGN_CODE;
-
     reloc = code;
     PI(0); PI(0); OP(ENV_REF);
     OP(DUP);
     OP(MUL);
     OP(JMP);
-
-    ALIGN_CODE;
 
     entry = code;
 
@@ -144,8 +139,6 @@ START_TEST(vm_closure)
     PI(0); PI(0); OP(ENV_REF);
     PI(1);
     OP(INVOKE_PROCEDURE);
-
-    ALIGN_CODE;
 
     *(uint32_t*)reloc = (code - (reloc + 4));
 
