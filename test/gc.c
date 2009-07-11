@@ -19,7 +19,13 @@ static void gc_core_teardown(void) {
     gc_pop_roots();
 }
 
-START_TEST(gc_sanity_check)
+BEGIN_SUITE(gc, "GC Test Suite");
+
+BEGIN_TEST_CASE(gc, core, "GC Core");
+SETUP_HOOK(gc, core, gc_core_setup);
+TEARDOWN_HOOK(gc, core, gc_core_teardown);
+
+TEST(gc, core, sanity_check)
 {
     reg1 = sc_alloc_cons();
     sc_set_car(reg1, sc_make_number(32));
@@ -39,7 +45,7 @@ START_TEST(gc_sanity_check)
 }
 END_TEST
 
-START_TEST(gc_booleans)
+TEST(gc, core, booleans)
 {
     fail_unless(sc_booleanp(sc_true));
     fail_unless(sc_booleanp(sc_false));
@@ -47,7 +53,7 @@ START_TEST(gc_booleans)
 }
 END_TEST
 
-START_TEST(objs_survive_gc)
+TEST(gc, core, objs_survive_gc)
 {
     reg1 = sc_alloc_cons();
     sc_set_car(reg1, sc_make_number(32));
@@ -68,7 +74,7 @@ START_TEST(objs_survive_gc)
 }
 END_TEST
 
-START_TEST(gc_frees_mem)
+TEST(gc, core, frees_mem)
 {
 #ifndef TEST_STRESS_GC
     uint32_t free_mem;
@@ -83,7 +89,7 @@ START_TEST(gc_frees_mem)
 }
 END_TEST
 
-START_TEST(gc_cons_cycle)
+TEST(gc, core, cons_cycle)
 {
     uint32_t free_mem;
     reg1 = sc_alloc_cons();
@@ -119,7 +125,7 @@ START_TEST(gc_cons_cycle)
 }
 END_TEST
 
-START_TEST(gc_basic_vector)
+TEST(gc, core, basic_vector)
 {
     int i;
     reg1 = sc_alloc_vector(10);
@@ -139,7 +145,7 @@ START_TEST(gc_basic_vector)
 }
 END_TEST
 
-START_TEST(gc_large_allocs)
+TEST(gc, core, large_allocs)
 {
     int i;
     for(i=0;i<2000;i++) {
@@ -154,7 +160,7 @@ START_TEST(gc_large_allocs)
 }
 END_TEST
 
-START_TEST(gc_many_allocs)
+TEST(gc, core, many_allocs)
 {
     int i;
     reg2 = reg1 = sc_alloc_cons();
@@ -181,7 +187,7 @@ void gc_reloc_external() {
     gc_relocate(&external_root);
 }
 
-START_TEST(gc_root_hook)
+TEST(gc, core, root_hook)
 {
     gc_register_gc_root_hook(gc_reloc_external);
     external_root = sc_alloc_cons();
@@ -196,7 +202,7 @@ START_TEST(gc_root_hook)
 }
 END_TEST
 
-START_TEST(gc_roots)
+TEST(gc, core, roots)
 {
     gc_handle reg;
 
@@ -217,7 +223,7 @@ START_TEST(gc_roots)
 }
 END_TEST
 
-START_TEST(gc_live_roots)
+TEST(gc, core, live_roots)
 {
     gc_handle reg;
     reg = reg1 = sc_alloc_cons();
@@ -236,6 +242,8 @@ START_TEST(gc_live_roots)
 }
 END_TEST
 
+END_TEST_CASE(gc, core);
+
 static void obarray_setup() {
     obarray_init();
 }
@@ -244,7 +252,13 @@ static void obarray_teardown() {
 
 }
 
-START_TEST(obarray_sancheck)
+BEGIN_TEST_CASE(gc, obarray, "obarray");
+SETUP_HOOK(gc, obarray, gc_core_setup);
+SETUP_HOOK(gc, obarray, obarray_setup);
+TEARDOWN_HOOK(gc, obarray, gc_core_teardown);
+TEARDOWN_HOOK(gc, obarray, obarray_teardown);
+
+TEST(gc, obarray, sancheck)
 {
     reg1 = sc_intern_symbol("hello");
     fail_unless(sc_symbolp(reg1));
@@ -254,7 +268,7 @@ START_TEST(obarray_sancheck)
 }
 END_TEST
 
-START_TEST(obarray_realloc)
+TEST(gc, obarray, realloc)
 {
     int i;
     char str[2] = "a";
@@ -272,37 +286,10 @@ START_TEST(obarray_realloc)
 }
 END_TEST
 
+END_TEST_CASE(gc, obarray);
+END_SUITE(gc);
+
 Suite *gc_suite()
 {
-    Suite *s = suite_create("GC Test Suites");
-    TCase *tc_core = tcase_create("GC core");
-    tcase_add_checked_fixture(tc_core,
-                              gc_core_setup,
-                              gc_core_teardown);
-    tcase_add_test(tc_core, gc_sanity_check);
-    tcase_add_test(tc_core, gc_booleans);
-    tcase_add_test(tc_core, objs_survive_gc);
-    tcase_add_test(tc_core, gc_frees_mem);
-    tcase_add_test(tc_core, gc_cons_cycle);
-    tcase_add_test(tc_core, gc_basic_vector);
-    tcase_add_test(tc_core, gc_large_allocs);
-    tcase_add_test(tc_core, gc_many_allocs);
-    tcase_add_test(tc_core, gc_root_hook);
-    tcase_add_test(tc_core, gc_roots);
-    tcase_add_test(tc_core, gc_live_roots);
-    suite_add_tcase(s, tc_core);
-
-    TCase *tc_obarray = tcase_create("obarray");
-
-    tcase_add_checked_fixture(tc_obarray,
-                              gc_core_setup,
-                              gc_core_teardown);
-    tcase_add_checked_fixture(tc_obarray,
-                              obarray_setup,
-                              obarray_teardown);
-    tcase_add_test(tc_obarray, obarray_sancheck);
-    tcase_add_test(tc_obarray, obarray_realloc);
-    suite_add_tcase(s, tc_obarray);
-
-    return s;
+    return construct_test_suite(gc);
 }
