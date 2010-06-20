@@ -9,10 +9,10 @@ typedef void (*test_func)(int);
 typedef void (*test_hook)(void);
 
 struct test_case {
-    test_func  funcs, end_funcs;
+    test_func  *funcs, *end_funcs;
     const char *test_name;
-    test_hook setup_hooks, end_setup_hooks;
-    test_hook teardown_hooks, end_teardown_hooks;
+    test_hook *setup_hooks, *end_setup_hooks;
+    test_hook *teardown_hooks, *end_teardown_hooks;
 };
 
 struct test_suite {
@@ -60,12 +60,12 @@ struct test_suite {
     __attribute__((section(sec ".teardown")))                   \
 
 #define SETUP_HOOK(suite, test, hook)                                   \
-    test_hook _setup_##suite##_##test##_##hook __used                   \
+    test_hook *_setup_##suite##_##test##_##hook __used                  \
     __attribute__((section(".data." #suite "." #test ".setup"))) =      \
          hook;
 
 #define TEARDOWN_HOOK(suite, test, hook)                                \
-    test_hook _teardown_##suite##_##test##_##hook __used                \
+    test_hook *_teardown_##suite##_##test##_##hook __used               \
     __attribute__((section(".data." #suite "." #test ".teardown"))) =   \
          hook;
 
@@ -76,7 +76,7 @@ struct test_suite {
 
 #define _TEST(sym, sec, fn)                                     \
     static void fn(int);                                        \
-    test_func _test_##fn __used                                 \
+    test_func *_test_##fn __used                                \
     __attribute__((section(sec ".funcs"))) = fn;                \
     START_TEST(fn)
 
