@@ -1,5 +1,6 @@
 CC=gcc
-CFLAGS=-g -Wall $(DEFS) -D_GNU_SOURCE
+CFLAGS=-g -Wall $(DEFS) -D_GNU_SOURCE -m32 -Wall -Werror
+LDFLAGS=-m32
 CPPFLAGS= -I.
 OBJECTS=gc.o scgc.o symbol.o vm.o
 
