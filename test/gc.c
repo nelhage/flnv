@@ -22,8 +22,7 @@ static void gc_core_teardown(void) {
 BEGIN_SUITE(gc, "GC Test Suite");
 
 BEGIN_TEST_CASE(gc, core, "GC Core");
-SETUP_HOOK(gc, core, gc_core_setup);
-TEARDOWN_HOOK(gc, core, gc_core_teardown);
+DEFINE_FIXTURE(gc, core, gc_core_setup, gc_core_teardown);
 
 TEST(gc, core, sanity_check)
 {
@@ -253,10 +252,8 @@ static void obarray_teardown() {
 }
 
 BEGIN_TEST_CASE(gc, obarray, "obarray");
-SETUP_HOOK(gc, obarray, gc_core_setup);
-SETUP_HOOK(gc, obarray, obarray_setup);
-TEARDOWN_HOOK(gc, obarray, gc_core_teardown);
-TEARDOWN_HOOK(gc, obarray, obarray_teardown);
+DEFINE_FIXTURE(gc, obarray, gc_core_setup, gc_core_teardown);
+DEFINE_FIXTURE(gc, obarray, obarray_setup, obarray_teardown);
 
 TEST(gc, obarray, sancheck)
 {

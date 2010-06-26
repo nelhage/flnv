@@ -59,12 +59,17 @@ struct test_suite {
     test_hook _begin_ ## sym ## _teardown[0]                    \
     __attribute__((section(sec ".teardown")))                   \
 
-#define SETUP_HOOK(suite, test, hook)                                   \
+
+#define DEFINE_FIXTURE(suite, test, setup, teardown) \
+    _SETUP_HOOK(suite, test, setup)                  \
+    _TEARDOWN_HOOK(suite, test, teardown)
+
+#define _SETUP_HOOK(suite, test, hook)                                  \
     test_hook _setup_##suite##_##test##_##hook __used                   \
     __attribute__((section(".data." #suite "." #test ".setup"))) =      \
          hook;
 
-#define TEARDOWN_HOOK(suite, test, hook)                                \
+#define _TEARDOWN_HOOK(suite, test, hook)                               \
     test_hook _teardown_##suite##_##test##_##hook __used                \
     __attribute__((section(".data." #suite "." #test ".teardown"))) =   \
          hook;
