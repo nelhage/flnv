@@ -19,12 +19,14 @@ static void gc_core_teardown(void) {
     gc_pop_roots();
 }
 
-BEGIN_SUITE(gc, "GC Test Suite");
+#define SUITE_NAME gc
 
-BEGIN_TEST_CASE(gc, core, "GC Core");
-DEFINE_FIXTURE(gc, core, gc_core_setup, gc_core_teardown);
+BEGIN_SUITE("GC Test Suite");
 
-TEST(gc, core, sanity_check)
+BEGIN_TEST_CASE(core, "GC Core");
+DEFINE_FIXTURE(core, gc_core_setup, gc_core_teardown);
+
+TEST(core, sanity_check)
 {
     reg1 = sc_alloc_cons();
     sc_set_car(reg1, sc_make_number(32));
@@ -44,7 +46,7 @@ TEST(gc, core, sanity_check)
 }
 END_TEST
 
-TEST(gc, core, booleans)
+TEST(core, booleans)
 {
     fail_unless(sc_booleanp(sc_true));
     fail_unless(sc_booleanp(sc_false));
@@ -52,7 +54,7 @@ TEST(gc, core, booleans)
 }
 END_TEST
 
-TEST(gc, core, objs_survive_gc)
+TEST(core, objs_survive_gc)
 {
     reg1 = sc_alloc_cons();
     sc_set_car(reg1, sc_make_number(32));
@@ -73,7 +75,7 @@ TEST(gc, core, objs_survive_gc)
 }
 END_TEST
 
-TEST(gc, core, frees_mem)
+TEST(core, frees_mem)
 {
 #ifndef TEST_STRESS_GC
     uint32_t free_mem;
@@ -88,7 +90,7 @@ TEST(gc, core, frees_mem)
 }
 END_TEST
 
-TEST(gc, core, cons_cycle)
+TEST(core, cons_cycle)
 {
     uint32_t free_mem;
     reg1 = sc_alloc_cons();
@@ -124,7 +126,7 @@ TEST(gc, core, cons_cycle)
 }
 END_TEST
 
-TEST(gc, core, basic_vector)
+TEST(core, basic_vector)
 {
     int i;
     reg1 = sc_alloc_vector(10);
@@ -144,7 +146,7 @@ TEST(gc, core, basic_vector)
 }
 END_TEST
 
-TEST(gc, core, large_allocs)
+TEST(core, large_allocs)
 {
     int i;
     for(i=0;i<2000;i++) {
@@ -159,7 +161,7 @@ TEST(gc, core, large_allocs)
 }
 END_TEST
 
-TEST(gc, core, many_allocs)
+TEST(core, many_allocs)
 {
     int i;
     reg2 = reg1 = sc_alloc_cons();
@@ -186,7 +188,7 @@ void gc_reloc_external() {
     gc_relocate(&external_root);
 }
 
-TEST(gc, core, root_hook)
+TEST(core, root_hook)
 {
     gc_register_gc_root_hook(gc_reloc_external);
     external_root = sc_alloc_cons();
@@ -201,7 +203,7 @@ TEST(gc, core, root_hook)
 }
 END_TEST
 
-TEST(gc, core, roots)
+TEST(core, roots)
 {
     gc_handle reg;
 
@@ -222,7 +224,7 @@ TEST(gc, core, roots)
 }
 END_TEST
 
-TEST(gc, core, live_roots)
+TEST(core, live_roots)
 {
     gc_handle reg;
     reg = reg1 = sc_alloc_cons();
@@ -241,7 +243,7 @@ TEST(gc, core, live_roots)
 }
 END_TEST
 
-END_TEST_CASE(gc, core);
+END_TEST_CASE(core);
 
 static void obarray_setup() {
     obarray_init();
@@ -251,11 +253,11 @@ static void obarray_teardown() {
 
 }
 
-BEGIN_TEST_CASE(gc, obarray, "obarray");
-DEFINE_FIXTURE(gc, obarray, gc_core_setup, gc_core_teardown);
-DEFINE_FIXTURE(gc, obarray, obarray_setup, obarray_teardown);
+BEGIN_TEST_CASE(obarray, "obarray");
+DEFINE_FIXTURE(obarray, gc_core_setup, gc_core_teardown);
+DEFINE_FIXTURE(obarray, obarray_setup, obarray_teardown);
 
-TEST(gc, obarray, sancheck)
+TEST(obarray, sancheck)
 {
     reg1 = sc_intern_symbol("hello");
     fail_unless(sc_symbolp(reg1));
@@ -265,7 +267,7 @@ TEST(gc, obarray, sancheck)
 }
 END_TEST
 
-TEST(gc, obarray, realloc)
+TEST(obarray, realloc)
 {
     int i;
     char str[2] = "a";
@@ -283,8 +285,8 @@ TEST(gc, obarray, realloc)
 }
 END_TEST
 
-END_TEST_CASE(gc, obarray);
-END_SUITE(gc);
+END_TEST_CASE(obarray);
+END_SUITE;
 
 Suite *gc_suite()
 {

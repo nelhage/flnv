@@ -20,7 +20,9 @@ struct test_suite {
     const char *suite_name;
 };
 
-#define BEGIN_SUITE(sym, name)                                          \
+#define BEGIN_SUITE(name) _BEGIN_SUITE(SUITE_NAME, name)
+#define _BEGIN_SUITE(sym, name) __BEGIN_SUITE(sym, name)
+#define __BEGIN_SUITE(sym, name)                                        \
     extern struct test_case _begin_ ## sym ## _cases[];                 \
     extern struct test_case _end_ ## sym ## _cases[];                   \
     struct test_suite _suite_ ## sym = {                                \
@@ -31,11 +33,14 @@ struct test_suite {
     struct test_case _begin_ ## sym ## _cases[0]                        \
     __attribute__((section(".data." #sym ".cases")));                   \
 
-#define BEGIN_TEST_CASE(suite, test, name)                      \
-    _BEGIN_TEST_CASE(suite, suite ## _ ## test,                 \
+#define BEGIN_TEST_CASE(test, name) _BEGIN_TEST_CASE(SUITE_NAME, test, name)
+#define _BEGIN_TEST_CASE(sym, test, name) __BEGIN_TEST_CASE(sym, test, name)
+
+#define __BEGIN_TEST_CASE(suite, test, name)                    \
+    _BEGIN_TEST_CASE_IMPL(suite, suite ## _ ## test,            \
                 ".data." #suite "." #test, name)
 
-#define _BEGIN_TEST_CASE(suite, sym, sec, name)                 \
+#define _BEGIN_TEST_CASE_IMPL(suite, sym, sec, name)            \
     extern test_func _begin_ ## sym ## _funcs[];                \
     extern test_hook _begin_ ## sym ## _setup[];                \
     extern test_hook _begin_ ## sym ## _teardown[];             \
@@ -60,8 +65,10 @@ struct test_suite {
     __attribute__((section(sec ".teardown")))                   \
 
 
-#define DEFINE_FIXTURE(suite, test, setup, teardown) \
-    _SETUP_HOOK(suite, test, setup)                  \
+#define DEFINE_FIXTURE(test, setup, teardown)           \
+    _DEFINE_FIXTURE(SUITE_NAME, test, setup, teardown)
+#define _DEFINE_FIXTURE(suite, test, setup, teardown)   \
+    _SETUP_HOOK(suite, test, setup)                     \
     _TEARDOWN_HOOK(suite, test, teardown)
 
 #define _SETUP_HOOK(suite, test, hook)                                  \
@@ -74,22 +81,27 @@ struct test_suite {
     __attribute__((section(".data." #suite "." #test ".teardown"))) =   \
          hook;
 
-#define TEST(suite, test, fn)                           \
-    _TEST(suite ## _ ## test,                           \
-          ".data." #suite "." #test,                    \
-          suite##_##test##_##fn)
 
-#define _TEST(sym, sec, fn)                                     \
+#define TEST(test, fn) _TEST(SUITE_NAME, test, fn)
+#define _TEST(sym, test, fn) __TEST(sym, test, fn)
+#define __TEST(suite, test, fn)                              \
+    _TEST_IMPL(suite ## _ ## test,                           \
+               ".data." #suite "." #test,                    \
+               suite##_##test##_##fn)
+
+#define _TEST_IMPL(sym, sec, fn)                                \
     static void fn(int);                                        \
     test_func _test_##fn __used                                 \
     __attribute__((section(sec ".funcs"))) = fn;                \
     START_TEST(fn)
 
-#define END_TEST_CASE(suite, test)                      \
-    _END_TEST_CASE(suite ## _ ## test,                  \
+#define END_TEST_CASE(test) _END_TEST_CASE(SUITE_NAME, test)
+#define _END_TEST_CASE(sym, test) __END_TEST_CASE(sym, test)
+#define __END_TEST_CASE(suite, test)                     \
+    _END_TEST_CASE_IMPL(suite ## _ ## test,              \
                    ".data." #suite "." #test)           \
 
-#define _END_TEST_CASE(sym, sec)                        \
+#define _END_TEST_CASE_IMPL(sym, sec)                   \
     test_func _end_ ## sym ## _funcs[0]                 \
     __attribute__((section(sec ".funcs")));             \
     test_hook _end_ ## sym ## _setup[0]                 \
@@ -97,7 +109,9 @@ struct test_suite {
     test_hook _end_ ## sym ## _teardown[0]              \
     __attribute__((section(sec ".teardown")))
 
-#define END_SUITE(sym)                                  \
+#define END_SUITE _END_SUITE(SUITE_NAME)
+#define _END_SUITE(sym) __END_SUITE(sym)
+#define __END_SUITE(sym)                                \
     struct test_case _end_##sym##_cases[0]              \
     __attribute__((section(".data." #sym ".cases")))
 
