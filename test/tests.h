@@ -33,7 +33,7 @@ struct test_suite {
     struct test_case _begin_ ## sym ## _cases[0]                        \
     __attribute__((section(".data." #sym ".cases")));                   \
 
-#define BEGIN_TEST_CASE(test, name) _BEGIN_TEST_CASE(SUITE_NAME, test, name)
+#define BEGIN_TEST_CASE(name) _BEGIN_TEST_CASE(SUITE_NAME, TEST_CASE, name)
 #define _BEGIN_TEST_CASE(sym, test, name) __BEGIN_TEST_CASE(sym, test, name)
 
 #define __BEGIN_TEST_CASE(suite, test, name)                    \
@@ -65,8 +65,8 @@ struct test_suite {
     __attribute__((section(sec ".teardown")))                   \
 
 
-#define DEFINE_FIXTURE(test, setup, teardown)           \
-    _DEFINE_FIXTURE(SUITE_NAME, test, setup, teardown)
+#define DEFINE_FIXTURE(setup, teardown)                         \
+    _DEFINE_FIXTURE(SUITE_NAME, TEST_CASE, setup, teardown)
 #define _DEFINE_FIXTURE(suite, test, setup, teardown)   \
     _SETUP_HOOK(suite, test, setup)                     \
     _TEARDOWN_HOOK(suite, test, teardown)
@@ -82,7 +82,7 @@ struct test_suite {
          hook;
 
 
-#define TEST(test, fn) _TEST(SUITE_NAME, test, fn)
+#define TEST(fn) _TEST(SUITE_NAME, TEST_CASE, fn)
 #define _TEST(sym, test, fn) __TEST(sym, test, fn)
 #define __TEST(suite, test, fn)                              \
     _TEST_IMPL(suite ## _ ## test,                           \
@@ -95,7 +95,7 @@ struct test_suite {
     __attribute__((section(sec ".funcs"))) = fn;                \
     START_TEST(fn)
 
-#define END_TEST_CASE(test) _END_TEST_CASE(SUITE_NAME, test)
+#define END_TEST_CASE _END_TEST_CASE(SUITE_NAME, TEST_CASE)
 #define _END_TEST_CASE(sym, test) __END_TEST_CASE(sym, test)
 #define __END_TEST_CASE(suite, test)                     \
     _END_TEST_CASE_IMPL(suite ## _ ## test,              \
